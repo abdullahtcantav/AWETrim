@@ -64,3 +64,15 @@ first write-up used a right-rule time axis and read 6.3 / 6.0 / 4.7 kW.)
 - The mirror rows make the problem LICQ-degenerate (every active node bound
   is active at both mirrored nodes); IPOPT copes with it, but the clean
   formulation is elimination of the second half (open follow-up).
+
+## Newton vs Lagrange trim residual (`compare_lagrangian_residual.py`)
+
+Would the quasi-steady trim be cheaper derived from a Lagrangian in the
+generalised coordinates (s, r) instead of the course-frame Newton balance?
+No: same three rows (agree to 3.5e-6), inertia terms are 26 of ~3400 node
+instructions, function evaluations are ~26 % of IPOPT's wall time. Write-up
+in `docs/cycle_optimisation/lagrangian_formulation.md` (+ `.pdf`); `--nlp`
+adds the IPOPT timing profile of a reel-out NLP, and `--turn-radius 25`,
+`--kinematics-cache`, `--exact-hessian` run the follow-up A/B (shared
+kinematics sub-expressions, exact Hessian): no wall-time gain either, the
+NLP is linear-algebra bound at this size.
