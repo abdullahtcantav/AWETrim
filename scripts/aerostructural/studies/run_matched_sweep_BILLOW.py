@@ -49,6 +49,7 @@ import numpy as np
 from awetrim.aerostructural.logging_config import *  # noqa: F401,F403
 from awetrim.aerostructural.results import aerostructural_results_root, save_sim_output
 from awetrim.aerostructural.case import DEFAULT_KITE_NAME
+from awetrim.aerostructural.convergence import set_absolute_residual_gate
 
 from run_chain_depower_BILLOW import (
     DEPOWER_QUADRATIC,
@@ -296,8 +297,9 @@ def main():
             predicted = ratio.predict(udp, last)
         wind = args.target_va / predicted
         gate = max(args.tol_min, args.tol_rel * (tether_force or 0.0))
-        solver["tol"] = float(gate)
-        solver["stagnation_tol"] = 0.1 * float(gate)
+        # Its own lagged-relative gate, applied as newtons; drop as_config's
+        # relative gate, which would otherwise win.
+        set_absolute_residual_gate(solver, gate, 0.1 * float(gate))
 
         started = time.perf_counter()
         attempts, iterations = [], 0

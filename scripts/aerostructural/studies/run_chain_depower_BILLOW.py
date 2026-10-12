@@ -40,6 +40,7 @@ from awetrim.aerostructural.results import aerostructural_results_root, save_sim
 from awetrim.aerostructural.utils import load_yaml, rotate_geometry
 from awetrim.aerostructural import aerodynamic_vsm
 from awetrim.aerostructural.billow import structural_billow
+from awetrim.aerostructural.convergence import resolve_residual_tolerances
 from awetrim.aerostructural.coupled import coupled_solver, read_struc_geometry_yaml
 from awetrim.system.tether import RigidLumpedTether
 from awetrim.utils.system_config import get_tether
@@ -276,16 +277,19 @@ def run_chain(shared, wind_speed, reach, step, results_dir, steer=0.0, steer_ste
     return tracking, meta, prepared["geometry"], prepared["structure"]
 
 
-def converged_steps(tracking, n_iter, tolerance):
+def converged_steps(tracking, n_iter, tolerance, is_relative=False):
     """Indices of the converged iterate at each distinct tape length.
 
     The driver only actuates once the residual gate is met, so the iteration
     immediately BEFORE a tape change is a converged state. Taking the last
     iterate at each length therefore takes the converged one, and the final
-    iterate closes the last step.
+    iterate closes the last step. ``tolerance`` is in the driver's active
+    measure: ``||f_res|| / |sum f_ext|`` when ``is_relative``, else newtons.
     """
     lengths = np.asarray(tracking["tape_length"])[:n_iter]
-    residual = np.asarray(tracking["residual_norm"])[:n_iter]
+    residual = np.asarray(
+        tracking["residual_relative" if is_relative else "residual_norm"]
+    )[:n_iter]
     picks = []  # (index, converged)
     for index in range(len(lengths)):
         if not np.isfinite(lengths[index]):
@@ -328,13 +332,17 @@ def main():
 
     project_dir = Path(__file__).resolve().parents[3]
     shared = build_once(project_dir, args.kite, args.panels_per_section)
-    gate = float(shared["config"]["aero_structural_solver"]["tol"])
+    # The gate the driver itself uses (as_config: relative since 2026-10-12).
+    gate, _, is_gate_relative = resolve_residual_tolerances(
+        shared["config"]["aero_structural_solver"]
+    )
     root = aerostructural_results_root(project_dir, args.kite) / "billow_depower_chains"
     root.mkdir(parents=True, exist_ok=True)
     csv_path = root / "chains.csv"
 
     fields = ["wind_speed", "direction", "tape_length", "u_dp", "speed_apparent",
-              "residual", "span", "le_arc", "arch_rise", "aero_force", "converged"]
+              "residual", "residual_relative", "span", "le_arc", "arch_rise",
+              "aero_force", "converged"]
     rows, started = [], time.perf_counter()
 
     print(f"{len(args.wind)} winds x 2 directions, tape +/-{args.reach} m "
@@ -356,7 +364,9 @@ def main():
                 continue
 
             n_iter = int(meta["n_iter"])
-            for index, converged in converged_steps(tracking, n_iter, gate):
+            for index, converged in converged_steps(
+                tracking, n_iter, gate, is_relative=is_gate_relative
+            ):
                 positions = np.asarray(tracking["positions"][index])
                 span, arc, rise = span_metrics(positions, geometry)
                 length = float(np.asarray(tracking["tape_length"])[index])
@@ -365,6 +375,9 @@ def main():
                     u_dp=float(depower_input(length)),
                     speed_apparent=float(np.asarray(tracking["speed_apparent"])[index]),
                     residual=float(np.asarray(tracking["residual_norm"])[index]),
+                    residual_relative=float(
+                        np.asarray(tracking["residual_relative"])[index]
+                    ),
                     span=span, le_arc=arc, arch_rise=rise,
                     aero_force=float(np.linalg.norm(
                         np.asarray(tracking["f_ext"][index]).sum(axis=0))),

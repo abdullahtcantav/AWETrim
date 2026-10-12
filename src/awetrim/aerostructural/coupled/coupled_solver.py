@@ -30,6 +30,13 @@ from . import aero2struc
 from ..billow import structural_billow
 from ..wireframe import structural_wireframe
 from ..convergence import remaining_drift  # noqa: F401  (re-exported)
+from ..convergence import (
+    check_convergence,
+    force_settle_state,
+    relative_residual_norm,
+    resolve_residual_tolerances,
+    resultant_tether_force,
+)
 from .. import aerodynamic_vsm, aerodynamic_bridle_line_drag, tracking
 from awetrim import plotting
 from awetrim.aerodynamics.apparent_wind import apparent_wind_at, inflow_state_of
@@ -651,80 +658,6 @@ def log_top_external_force_nodes(
         )
 
 
-# TODO: this should also use structural is not converging
-def check_convergence(
-    i,
-    f_residual,
-    f_residual_list,
-    f_aero_wing_vsm_format,
-    config,
-    stagnation_check_start=0,
-):
-    """
-    Check convergence conditions for the aero-structural solver.
-
-    Args:
-        i: Current iteration number
-        f_residual: Current residual force vector
-        f_residual_list: List of residual force norms from all iterations
-        f_aero_wing_vsm_format: Aerodynamic forces in VSM format
-        config: Configuration dictionary
-        stagnation_check_start: Iteration index from which to check stagnation
-            (reset when switching regularization phase)
-
-    Returns:
-        tuple: (is_convergence, should_break, is_stagnated)
-            - is_convergence: True if converged, False otherwise
-            - should_break: True if loop should break, False to continue
-            - is_stagnated: True if residual has stagnated (no longer changing)
-    """
-    is_convergence = False
-    should_break = False
-    is_stagnated = False
-
-    n_stag = config["aero_structural_solver"].get("n_max_constant_residual_force", 15)
-    # Number of iterations since the stagnation check window started
-    iters_since_start = i - stagnation_check_start
-
-    ### All the convergence checks, are be done in if-elif because only 1 should hold at once
-    # if convergence (residual below set tolerance)
-    if np.linalg.norm(f_residual) <= config["aero_structural_solver"]["tol"]:
-        is_convergence = True
-
-    # if residual forces are NaN
-    elif np.isnan(np.linalg.norm(f_residual)):
-        is_convergence = False
-        logging.info("Classic PS diverged - residual force is NaN")
-        should_break = True
-
-    # if residual forces are not changing anymore (compare start of window vs current)
-    elif iters_since_start > n_stag and np.abs(
-        f_residual_list[i - n_stag] - f_residual_list[i]
-    ) < config["aero_structural_solver"].get("stagnation_tol", 1.0):
-        is_convergence = False
-        is_stagnated = True
-
-    # if too many iterations are needed
-    elif i > config["aero_structural_solver"]["max_iter"]:
-        is_convergence = False
-        logging.info(
-            f"Classic PS non-converging - more than max ({config['aero_structural_solver']['max_iter']}) iterations needed"
-        )
-        should_break = True
-
-    # special case for running the simulation for only one timestep
-    elif config["is_run_only_1_time_step"]:
-        should_break = True
-
-    # when aero does not converge
-    elif np.sum([force[1] for force in f_aero_wing_vsm_format]) == np.nan:
-        is_convergence = False
-        logging.info("Classic PS non-converging - aero forces are NaN")
-        should_break = True
-
-    return is_convergence, should_break, is_stagnated
-
-
 def main(
     m_arr=None,
     struc_nodes=None,
@@ -816,7 +749,26 @@ def main(
         ),
     )
     is_convergence = False
+    # The convergence measure: ||f_res|| / |sum f_ext| when the solver config
+    # sets residual_tol_relative, else the legacy absolute ||f_res|| [N] against
+    # `tol`. One shared decision (convergence.resolve_residual_tolerances) for
+    # this driver and the wireframe one; f_residual_list holds the ACTIVE
+    # measure, because the stagnation window compares against its tolerance.
+    residual_tol_active, _, is_residual_relative = resolve_residual_tolerances(
+        config["aero_structural_solver"]
+    )
     f_residual_list = []
+    f_residual_norm_n = float("nan")
+    f_residual_relative = float("nan")
+    force_reference = float("nan")
+    exit_reason = "max_iter"
+    # Second exit condition: the tether force must have settled since the last
+    # state change (convergence.force_settle_state). 0 disables.
+    force_settle_rtol = float(
+        config["aero_structural_solver"].get("force_settle_rtol", 0.0) or 0.0
+    )
+    force_since_change = []
+    force_remaining = float("nan")
     f_tether_drag = np.zeros(3)
     is_residual_below_tol = False
     struc_nodes_prev = None  # Initialize previous points for tracking
@@ -1287,7 +1239,12 @@ def main(
                 for fix_idx in config["structural_pss"]["fixed_point_indices"]:
                     f_residual[3 * fix_idx : 3 * fix_idx + 3] = 0.0
 
-            f_residual_list.append(np.linalg.norm(np.abs(f_residual)))
+            f_residual_norm_n = float(np.linalg.norm(f_residual))
+            force_reference = resultant_tether_force(f_ext)
+            f_residual_relative = relative_residual_norm(f_residual, force_reference)
+            f_residual_list.append(
+                f_residual_relative if is_residual_relative else f_residual_norm_n
+            )
             if config["structural_solver"] == "wireframe":
                 logging.debug(
                     f"residual force in y-direction: {np.sum([f_residual[1::3]]):.3f}N"
@@ -1336,7 +1293,7 @@ def main(
             ### PROGRESS BAR
             pbar.set_postfix(
                 {
-                    "res": f"{np.linalg.norm(f_residual):.3f}N",
+                    "res": f"{f_residual_norm_n:.3f}N ({f_residual_relative:.2e})",
                     "aero_model": f"{end_time_aero_model-begin_time_aero_model:.2f}s",
                     "struc_model": f"{end_time_f_int-begin_time_f_int:.2f}s",
                     "ext_total": f"{end_time_f_ext-begin_time_f_ext:.2f}s",
@@ -1347,12 +1304,14 @@ def main(
 
             ### CHECK CONVERGENCE
             is_convergence, should_break, is_stagnated = check_convergence(
-                i=i,
-                f_residual=f_residual,
-                f_residual_list=f_residual_list,
-                f_aero_wing_vsm_format=f_aero_wing_vsm_format,
-                config=config,
+                iteration=i,
+                residual=f_residual,
+                residual_norm_history=f_residual_list,
+                aero_forces_vsm_format=f_aero_wing_vsm_format,
+                solver_config=config["aero_structural_solver"],
+                is_run_only_1_time_step=config["is_run_only_1_time_step"],
                 stagnation_check_start=stagnation_check_start,
+                force_reference=force_reference,
             )
 
             if is_stagnated:
@@ -1360,6 +1319,25 @@ def main(
                     "coupled loop stagnated - the residual no longer changes"
                 )
                 should_break = True
+                exit_reason = "stagnated"
+            elif should_break:
+                exit_reason = (
+                    "diverged" if not np.isfinite(f_residual_norm_n) else "stopped"
+                )
+
+            ### FORCE SETTLE (see force_settle_rtol)
+            force_since_change.append(force_reference)
+            is_force_settled, force_remaining = force_settle_state(
+                force_since_change, force_settle_rtol
+            )
+            if is_convergence and not is_force_settled:
+                logging.info(
+                    "residual below the gate at iteration %d but the tether "
+                    "force has not settled (%d value(s) since the last change, "
+                    "%.1e of it still moving, tolerance %.1e); held",
+                    i, len(force_since_change), force_remaining, force_settle_rtol,
+                )
+                is_convergence = False
 
             ### STEERING SETTLE (see steering_settle_course_rate_tol)
             if course_rate_since_step is not None:
@@ -1415,6 +1393,8 @@ def main(
                 # If actuation not finalized, continue to next iteration
                 if not is_actuation_finalized:
                     # ACTUATION PHASE: Continue until power tape reaches final extension
+                    # The forces before the step belong to another equilibrium.
+                    force_since_change = []
                     continue
 
                 # Steering walks once the depower has arrived, one step per
@@ -1443,12 +1423,15 @@ def main(
                         # equilibrium; comparing across it can call the
                         # growing steered state "stagnated".
                         stagnation_check_start = i + 1
+                        force_since_change = []
                         continue
 
             # Check if we should exit the loop
             if should_break or (
                 is_convergence and is_actuation_finalized and is_steering_finalized
             ):
+                if is_convergence:
+                    exit_reason = "converged"
                 break
     ######################################################################
     ## END OF SIMULATION FOR LOOP
@@ -1546,6 +1529,20 @@ def main(
         # initial + number of completed loop iterations.
         "n_iter": len(f_residual_list) + 1,
         "converged": is_convergence,
+        # Why the loop ended: converged | stagnated | diverged | stopped (aero
+        # NaN, single-step run) | max_iter. The final residual in both
+        # measures, and the gate in whichever one residual_tol_is_relative
+        # says, so a stored run states what "converged" meant.
+        "exit_reason": exit_reason,
+        "residual_final_n": float(f_residual_norm_n),
+        "residual_relative": float(f_residual_relative),
+        "tether_force_resultant": float(force_reference),
+        "residual_tol_active": float(residual_tol_active),
+        "residual_tol_is_relative": bool(is_residual_relative),
+        # force_settle_state at exit: the fraction of the tether force still
+        # moving (NaN when the rule is off), and the tolerance it was held to.
+        "force_remaining_relative": float(force_remaining),
+        "force_settle_rtol": float(force_settle_rtol),
         "rest_lengths": rest_lengths,  # ensure numeric array
         # Convert kite_connectivity to a numeric array for HDF5 compatibility
         "kite_connectivity": np.array(

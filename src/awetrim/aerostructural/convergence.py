@@ -37,7 +37,10 @@ with the fixed nodes zeroed. That norm can be judged two ways:
 Which one is active is decided by ``resolve_residual_tolerances``: configure
 ``residual_tol_relative`` to get the relative criterion, otherwise the absolute
 ``tol`` stays in force. The two are never silently interchanged -- a ``tol: 5``
-read as a ratio would "converge" on iteration 1.
+read as a ratio would "converge" on iteration 1. Both coupled drivers (the
+wireframe ``coupled_solver_qsm`` and the backend-agnostic
+``coupled.coupled_solver`` that Billow runs through) take the decision from
+here; ``set_absolute_residual_gate`` is how a caller opts back into newtons.
 
 ``resultant_tether_force`` is the single place the normalising force is
 defined; ``relative_residual_norm`` the single place the ratio is formed.
@@ -124,6 +127,28 @@ def resolve_residual_tolerances(solver_config) -> tuple[float, float, bool]:
         )
     )
     return residual_tol, stagnation_tol, True
+
+
+def set_absolute_residual_gate(
+    solver_config: dict, tol: float, stagnation_tol: float
+) -> dict:
+    """Make the legacy ABSOLUTE gate [N] the active one, in place.
+
+    Setting ``tol`` alone is not enough once the config carries
+    ``residual_tol_relative`` (the LEI-V3 as_config does since 2026-10-12): the
+    relative key wins and the newton value would be silently ignored. So the
+    relative keys are removed here, in the one place a caller asks for the
+    absolute criterion. Returns ``solver_config`` for chaining.
+    """
+    for key in (
+        "residual_tol_relative",
+        "stagnation_tol_relative",
+        "residual_tol_relative_fallback",
+    ):
+        solver_config.pop(key, None)
+    solver_config["tol"] = float(tol)
+    solver_config["stagnation_tol"] = float(stagnation_tol)
+    return solver_config
 
 
 def resolve_fallback_tolerance(solver_config, residual_tol: float) -> float:
@@ -294,7 +319,7 @@ def check_convergence(
         residual_norm = relative_residual_norm(residual, force_reference)
     else:
         residual_norm = residual_norm_absolute
-    n_stag = solver_config["n_max_constant_residual_force"]
+    n_stag = solver_config.get("n_max_constant_residual_force", 15)
     iters_since_start = iteration - stagnation_check_start
 
     if np.isnan(residual_norm_absolute):
@@ -341,12 +366,57 @@ __all__ = [
     "check_convergence",
     "compute_adaptive_dt",
     "element_elongations",
+    "FORCE_SETTLE_WINDOW",
+    "force_settle_state",
     "max_element_elongation",
     "relative_residual_norm",
     "resolve_fallback_tolerance",
     "resolve_residual_tolerances",
     "resultant_tether_force",
+    "set_absolute_residual_gate",
 ]
+
+#: Iterations of tether-force history the settle rule needs before it can pass:
+#: remaining_drift's 3 change ratios need 5 values. This is what makes the
+#: first relaxed iterations unable to exit.
+FORCE_SETTLE_WINDOW = 5
+
+
+def force_settle_state(force_history, rtol: float) -> tuple[bool, float]:
+    """Has the tether force stopped moving? ``(settled, remaining / force)``.
+
+    A SECOND exit condition next to the residual gate. The residual is the
+    change in load between iterations, and the first Aitken step moves the
+    shape by only ``relaxation_factor`` (0.05) of the structural update, so it
+    reads small whatever the distance to the fixed point: on the LEI-V3 Billow
+    baseline, 1.5e-4 at iteration 1 with the force 3.8 % short (2026-10-12).
+    So the exit also requires the quantity that is reported to have settled:
+
+    * at least ``FORCE_SETTLE_WINDOW`` values since the last state change
+      (actuation step, stiffness change) -- the caller resets the history, and
+    * either the spread of the last ``FORCE_SETTLE_WINDOW`` values, or the
+      change still to come (``remaining_drift``, geometric tail), within
+      ``rtol * |F|``. The spread accepts a limit cycle of negligible amplitude,
+      where the tail estimate is infinite by construction.
+
+    ``rtol <= 0`` disables the rule: ``(True, nan)``.
+    """
+    rtol = float(rtol)
+    if not np.isfinite(rtol) or rtol <= 0.0:
+        return True, float("nan")
+    values = np.asarray(force_history, dtype=float)
+    if values.size < FORCE_SETTLE_WINDOW or not np.all(
+        np.isfinite(values[-FORCE_SETTLE_WINDOW:])
+    ):
+        return False, float("inf")
+    scale = abs(float(values[-1]))
+    if scale <= _MIN_FORCE_REFERENCE_N:
+        return False, float("inf")
+    window = values[-FORCE_SETTLE_WINDOW:]
+    spread = float(window.max() - window.min()) / scale
+    remaining = min(spread, remaining_drift(values) / scale)
+    return bool(remaining <= rtol), float(remaining)
+
 
 def remaining_drift(values, n_ratios=3):
     """Estimated change still to come in a converging sequence [its unit].

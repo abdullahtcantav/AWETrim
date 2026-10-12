@@ -193,3 +193,81 @@ def test_fallback_applies_to_the_absolute_criterion_too():
     assert convergence.resolve_fallback_tolerance(_solver_config(), 5.0) == (
         pytest.approx(50.0)
     )
+
+
+def test_set_absolute_residual_gate_makes_newtons_the_live_measure():
+    # Setting `tol` alone is overridden once residual_tol_relative is present;
+    # the helper must remove the relative keys, fallback included (a ratio
+    # fallback read as newtons would accept anything).
+    config = _solver_config(
+        residual_tol_relative=1e-4,
+        stagnation_tol_relative=4e-5,
+        residual_tol_relative_fallback=2e-3,
+    )
+    assert convergence.set_absolute_residual_gate(config, 0.5, 0.05) is config
+    assert "residual_tol_relative" not in config
+    assert "stagnation_tol_relative" not in config
+    assert "residual_tol_relative_fallback" not in config
+    assert convergence.resolve_residual_tolerances(config) == (0.5, 0.05, False)
+
+
+def test_the_lei_v3_as_config_ships_the_relative_gate_only():
+    # One criterion in the shipped file: a dead `tol` next to the live
+    # relative key is how the Billow driver's silent absolute gate went unseen.
+    from awetrim.aerostructural.utils import load_yaml
+    from awetrim.utils.config_paths import REPO_ROOT
+
+    solver = load_yaml(REPO_ROOT / "data" / "LEI-V3-KITE" / "as_config.yaml")[
+        "aero_structural_solver"
+    ]
+    assert "tol" not in solver
+    assert "stagnation_tol" not in solver
+    tol, stagnation, is_relative = convergence.resolve_residual_tolerances(solver)
+    assert is_relative is True
+    assert tol == pytest.approx(1e-4)
+    assert stagnation == pytest.approx(4e-5)
+
+
+# ------------------------------------------------------- tether-force settle
+# |sum f_ext| per iteration on the LEI-V3 Billow baseline (run_simulation_BILLOW
+# inputs, 2026-10-12). The residual gate 1e-4 passed at index 5; index 1 read
+# 1.5e-4 with the force 3.8% short.
+_BILLOW_BASELINE_FORCE = [4296.3, 4300.0, 4324.8, 4459.5, 4469.7, 4470.4, 4469.9, 4470.0]
+
+
+def test_force_settle_is_off_without_a_tolerance():
+    assert convergence.force_settle_state([1.0], 0.0)[0] is True
+    assert convergence.force_settle_state([1.0], None or 0.0)[0] is True
+
+
+def test_force_settle_needs_a_full_window_of_history():
+    flat = [1000.0] * (convergence.FORCE_SETTLE_WINDOW - 1)
+    assert convergence.force_settle_state(flat, 1e-4) == (False, float("inf"))
+    assert convergence.force_settle_state(flat + [1000.0], 1e-4)[0] is True
+
+
+def test_force_settle_holds_the_billow_baseline_until_the_force_stops():
+    settled = [
+        convergence.force_settle_state(_BILLOW_BASELINE_FORCE[: k + 1], 1e-4)[0]
+        for k in range(len(_BILLOW_BASELINE_FORCE))
+    ]
+    assert settled == [False] * 7 + [True]
+
+
+def test_force_settle_accepts_a_negligible_limit_cycle_only():
+    # A cycle has no geometric tail (remaining_drift is infinite); its spread
+    # decides. 0.1 N on 4 kN passes 1e-4, 10 N does not.
+    small = [4000.0, 4000.1, 4000.0, 4000.1, 4000.0, 4000.1]
+    large = [4000.0, 4010.0, 4000.0, 4010.0, 4000.0, 4010.0]
+    assert convergence.force_settle_state(small, 1e-4)[0] is True
+    assert convergence.force_settle_state(large, 1e-4)[0] is False
+
+
+def test_the_lei_v3_as_config_ships_the_force_settle_rule():
+    from awetrim.aerostructural.utils import load_yaml
+    from awetrim.utils.config_paths import REPO_ROOT
+
+    solver = load_yaml(REPO_ROOT / "data" / "LEI-V3-KITE" / "as_config.yaml")[
+        "aero_structural_solver"
+    ]
+    assert solver["force_settle_rtol"] == pytest.approx(1e-4)

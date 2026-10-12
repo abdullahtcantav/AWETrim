@@ -33,6 +33,7 @@ from awetrim.aerostructural.results import aerostructural_results_root, save_sim
 from awetrim.aerostructural.billow import structural_billow as sb
 from awetrim.aerostructural.coupled import read_struc_geometry_yaml
 from awetrim.aerostructural.case import DEFAULT_KITE_NAME
+from awetrim.aerostructural.convergence import set_absolute_residual_gate
 
 from run_chain_depower_BILLOW import DEPOWER_QUADRATIC, build_once, run_chain, span_metrics
 
@@ -181,11 +182,14 @@ def main():
         # run_chain, which deep-copies shared["config"] at call time.
         shared["config"]["strut_padding"] = args.strut_padding
     shared["config"]["wind_speed_wind_ref"] = float(args.wind)
-    shared["config"]["aero_structural_solver"]["tol"] = float(args.tol)
     shared["config"]["aero_structural_solver"]["max_iter"] = int(args.max_iter)
     stagnation = (args.stagnation_tol if args.stagnation_tol is not None
                   else 0.1 * float(args.tol))
-    shared["config"]["aero_structural_solver"]["stagnation_tol"] = float(stagnation)
+    # This study's gate is ABSOLUTE [N] by design (one level for every
+    # pattern); drop as_config's relative gate, which would otherwise win.
+    set_absolute_residual_gate(
+        shared["config"]["aero_structural_solver"], args.tol, stagnation
+    )
     if args.no_stagnation_stop:
         shared["config"]["aero_structural_solver"]["n_max_constant_residual_force"] = (
             int(args.max_iter) + 1

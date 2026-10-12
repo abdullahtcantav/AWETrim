@@ -16,6 +16,11 @@
 
 import numpy as np
 
+from awetrim.aerostructural.convergence import (
+    relative_residual_norm,
+    resultant_tether_force,
+)
+
 
 def setup_tracking_arrays(n_pts, t_vector, n_panels=0, n_frames=0):
     """
@@ -43,6 +48,9 @@ def setup_tracking_arrays(n_pts, t_vector, n_panels=0, n_frames=0):
         "f_ext": np.zeros((nt, n_pts, 3)),
         "f_int": np.zeros((nt, n_pts, 3)),
         "residual_norm": np.zeros(nt),
+        # ||f_res|| / |sum f_ext|, the measure the coupled gate uses when
+        # residual_tol_relative is set (convergence.relative_residual_norm).
+        "residual_relative": np.full(nt, np.nan),
         "max_residual": np.zeros(nt),
     }
     if n_panels > 0:
@@ -143,6 +151,10 @@ def update_tracking_arrays(
     # 3) Norms
     tracking_data["residual_norm"][idx] = np.linalg.norm(f_int_flat)
     tracking_data["max_residual"][idx] = np.max(np.abs(f_int_flat))
+    if "residual_relative" in tracking_data:
+        tracking_data["residual_relative"][idx] = relative_residual_norm(
+            f_int_flat, resultant_tether_force(f_ext_flat)
+        )
 
     # 4) Flight and actuation state, so a chain can be sliced apart later
     for name, value in (("tape_length", tape_length),

@@ -33,6 +33,7 @@ import numpy as np
 from awetrim.aerostructural.logging_config import *  # noqa: F401,F403
 from awetrim.aerostructural.results import aerostructural_results_root
 from awetrim.aerostructural.case import DEFAULT_KITE_NAME
+from awetrim.aerostructural.convergence import set_absolute_residual_gate
 
 from check_mirror_asymmetry import decompose, kabsch, mirror_partners
 from run_chain_depower_BILLOW import build_once, run_chain
@@ -146,10 +147,13 @@ def main():
     shared = build_once(project, args.kite, args.panels_per_section,
                         {"aerodynamic": {"gamma_loop_type": args.gamma_loop}})
     solver = shared["config"]["aero_structural_solver"]
-    solver["tol"] = float(args.tol)
     solver["max_iter"] = int(args.max_iter)
-    solver["stagnation_tol"] = float(
-        args.stagnation_tol if args.stagnation_tol is not None else 0.1 * args.tol
+    # ABSOLUTE gate [N], as this study was run and cited; drop as_config's
+    # relative gate, which would otherwise win.
+    set_absolute_residual_gate(
+        solver,
+        args.tol,
+        args.stagnation_tol if args.stagnation_tol is not None else 0.1 * args.tol,
     )
     if args.settle is not None:
         solver["steering_settle_iterations_after_update"] = int(args.settle)

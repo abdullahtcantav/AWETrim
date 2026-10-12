@@ -195,24 +195,31 @@ aero2struc:
 aero_structural_solver:
   max_iter: !!int 200 # was 100; the realised-steering gate holds steered rows to ~50-90 iterations (2026-09-23)
   it_check: !!int 5
-  tol: !!float 5 #N
-  # ABSOLUTE gate [N], above. It cannot pin the answer across a sweep: 5 N is
-  # 6.8e-4 of the tether load at 7.4 kN but 1.3e-3 at 3.9 kN, and measured over
-  # a 6-row depower x steering sweep the SAME point landed 5-15% apart in CL,
-  # CD and tether force depending only on whether it was reached cold or from a
-  # warm start (a warm start approaches from closer and so trips the gate
-  # further from the fixed point). Uncomment to converge instead on the
-  # DIMENSIONLESS ||f_int + f_ext|| / |sum f_ext|, which means the same thing at
-  # every tether load; `tol` is then unused. REQUIRED for any handover,
-  # continuation or warm start to be meaningful. Left off by default only so
-  # this file does not change every other consumer's results at once -- the
-  # sweeps pass --as-residual-tol-relative explicitly.
-  # residual_tol_relative: !!float 1.0e-4
-  # stagnation_tol_relative: !!float 4.0e-5
+  # Coupled gate: the DIMENSIONLESS ||f_int + f_ext|| / |sum f_ext|, the nodal
+  # force residual over the tether load, for BOTH drivers (wireframe/PSM and
+  # Billow). Since 2026-10-12 the only gate in this file. It replaced the
+  # absolute `tol: 5` [N], which could not pin the answer across a sweep: 5 N
+  # is 6.8e-4 of the tether load at 7.4 kN but 1.3e-3 at 3.9 kN, and the SAME
+  # point landed 5-15% apart in CL, CD and tether force depending only on
+  # whether it was reached cold or warm; on the Billow baseline
+  # (run_simulation_BILLOW inputs) it exited at iteration 2 with the tether
+  # force 3.8% below the fixed point (4298 vs 4468 N). Results stored under
+  # `tol: 5` do not reproduce under this gate. A caller that wants the legacy
+  # absolute gate sets `tol` (+ `stagnation_tol`) [N] AND removes
+  # residual_tol_relative; with both present the relative one wins
+  # (convergence.resolve_residual_tolerances).
+  residual_tol_relative: !!float 1.0e-4
+  stagnation_tol_relative: !!float 4.0e-5 # residual span over n_max_constant_residual_force iterations below this = stagnated
+  # Second exit condition (both drivers, convergence.force_settle_state): the
+  # tether force must also have settled, at least 5 iterations since the last
+  # tape or stiffness change, with its spread or estimated remaining change
+  # within this fraction. The residual alone reads small on the first relaxed
+  # iteration (Billow baseline: 1.5e-4 at iteration 1, force 3.8% short); this
+  # makes an exit there impossible. 0 disables.
+  force_settle_rtol: !!float 1.0e-4
   is_with_aitken_relaxation: !!bool true
   relaxation_factor: !!float 0.05 #0.05-0.3
   n_max_constant_residual_force: !!int 10
-  stagnation_tol: !!float 2 # N, tolerance for stagnation detection
   qs_state_stagnation_decimals: !!int 2 # stop if opt_x is unchanged at this rounding
   qs_state_stagnation_n_iter: !!int 30 # consecutive unchanged iterations required to stop (0 disables)
   qs_speed_bound_patience: !!int 3 # runaway stop: trim pinned on its kite-speed bound this many iterations in a row -> not converged (0 disables)

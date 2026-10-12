@@ -33,6 +33,7 @@ from .actuation import (
 from ..convergence import (
     remaining_drift,
     check_convergence,
+    force_settle_state,
     relative_residual_norm,
     resolve_fallback_tolerance,
     resolve_residual_tolerances,
@@ -600,6 +601,14 @@ def main(
     speed_bound_counter = 0
     runaway_should_break = False
     stop_reason = None
+    # Second exit condition: the tether force must have settled since the last
+    # state change (convergence.force_settle_state). 0 disables. Gates the
+    # main tier only; the plateau fallback keeps its own acceptance.
+    force_settle_rtol = float(
+        config["aero_structural_solver"].get("force_settle_rtol", 0.0) or 0.0
+    )
+    force_since_change = []
+    force_remaining = float("nan")
     steering_actuation_interval_iters = int(
         config["aero_structural_solver"].get("steering_actuation_interval_iters", 5)
     )
@@ -1565,6 +1574,20 @@ def main(
                 force_reference=force_reference,
             )
 
+            ### FORCE SETTLE (see force_settle_rtol)
+            force_since_change.append(force_reference)
+            is_force_settled, force_remaining = force_settle_state(
+                force_since_change, force_settle_rtol
+            )
+            if is_convergence and not is_force_settled:
+                logging.info(
+                    "residual below the gate at iteration %d but the tether "
+                    "force has not settled (%d value(s) since the last change, "
+                    "%.1e of it still moving, tolerance %.1e); held",
+                    i, len(force_since_change), force_remaining, force_settle_rtol,
+                )
+                is_convergence = False
+
             ### ELEMENT ELONGATION BOUND
             # Stiffen whatever exceeds the bound and keep iterating: the bound
             # is part of the convergence criterion, not a post-check. Once
@@ -1789,6 +1812,10 @@ def main(
                             i,
                         )
 
+            if stiffness_updated_now:
+                # A stiffness change starts a new equilibrium.
+                force_since_change = []
+
             should_apply_steering_now = (
                 steering_tape_extension_step != 0
                 and steering_tape_final_extension != 0
@@ -1854,6 +1881,8 @@ def main(
                 n_power_tape_steps=n_power_tape_steps,
             )
 
+            if did_update_depower or did_update_steering:
+                force_since_change = []
             if did_update_depower:
                 depower_settle_counter = depower_settle_iterations_after_update
             elif depower_settle_counter > 0:
@@ -2179,6 +2208,8 @@ def main(
         # plateaued on a limit cycle rather than reaching a fixed point.
         # `residual_cycle_span` is that orbit's width in the active measure.
         "converged_at_fallback": bool(is_converged_at_fallback),
+        "force_remaining_relative": float(force_remaining),
+        "force_settle_rtol": float(force_settle_rtol),
         "residual_tol_fallback": float(residual_tol_fallback),
         "residual_cycle_span": float(residual_cycle_span),
         "residual_best": float(residual_best),

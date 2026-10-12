@@ -49,6 +49,7 @@ src/awetrim/aerostructural/
                                    aero mesh through it)
   forces.py                        distribute_total_force_by_particle_mass
   convergence.py                   check_convergence, resolve_residual_tolerances,
+                                   set_absolute_residual_gate, force_settle_state,
                                    resultant_tether_force, relative_residual_norm,
                                    element_elongations, max_element_elongation
   results.py                       save_sim_output, append_sweep_csv_row, build_sweep_csv_row
@@ -263,6 +264,9 @@ Fixed-point loop (wireframe/coupling.WireframeQsmCoupler.solve,
   8. Aitken relaxation on node displacement
   9. wireframe/actuation.update_*_tape_actuation() (every N iterations) [wireframe]
   10. convergence.check_convergence() → break or continue                    [common]
+      (BOTH drivers: wireframe/coupled_solver_qsm and coupled/coupled_solver,
+       the one Billow runs through; the latter had its own absolute-only copy
+       until 2026-10-12 and silently ignored residual_tol_relative)
 ```
 
 ## Key Dataclasses (protocols.py)
@@ -901,8 +905,11 @@ structural_pss:
 
 aero_structural_solver:
   max_iter: 100
-  residual_tol_relative: 1.0e-4   # preferred: dimensionless, see below
-  tol: 5.0                        # legacy absolute [N], used only if the above is absent
+  residual_tol_relative: 1.0e-4   # THE gate (LEI-V3 as_config since 2026-10-12), see below
+  stagnation_tol_relative: 4.0e-5
+  force_settle_rtol: 1.0e-4       # tether force must ALSO have settled; 0 = off
+  # tol / stagnation_tol [N]: legacy absolute gate, live only when
+  # residual_tol_relative is absent (set it with set_absolute_residual_gate)
   relaxation_factor: 0.5
   is_with_aitken_relaxation: true
   # Adaptive Aitken floor (opt-in, EXPERIMENTAL -- measured NOT to help).
@@ -1047,8 +1054,22 @@ The coupled loop converges on the global nodal force residual
 
 | key | measure | meaning |
 |-----|---------|---------|
-| `residual_tol_relative` | `\|\|f_res\|\| / F_tether` [-] | **preferred.** `F_tether = \|sum f_ext\|` is the reaction the constrained bridle node carries |
+| `residual_tol_relative` | `\|\|f_res\|\| / F_tether` [-] | **the default** (LEI-V3 as_config, 1e-4, since 2026-10-12). `F_tether = \|sum f_ext\|` is the reaction the constrained bridle node carries |
 | `tol` | `\|\|f_res\|\|` [N] | legacy; active only when the relative key is absent |
+
+Both coupled drivers -- `wireframe/coupled_solver_qsm` and the
+backend-agnostic `coupled/coupled_solver` (Billow) -- call the shared
+`check_convergence`. A caller that wants the absolute gate uses
+`set_absolute_residual_gate(solver_config, tol, stagnation_tol)`, which also
+removes the relative keys: setting `tol` alone is silently overridden once
+the config carries `residual_tol_relative` (the Billow studies
+`run_ab_canopy_pattern`, `run_steering_BILLOW`, `run_matched_sweep_BILLOW`
+keep their cited absolute gates this way; `run_chain_depower_BILLOW` follows
+the config). Every iteration's relative residual is stored as
+`tracking/residual_relative` (NaN in files written before 2026-10-12); the
+Billow driver's meta adds `exit_reason` (converged | stagnated | diverged |
+stopped | max_iter), `residual_final_n`, `residual_relative`,
+`tether_force_resultant`, `residual_tol_active`, `residual_tol_is_relative`.
 
 `resolve_residual_tolerances` decides which is live and returns the tolerance
 in the active unit, so the convergence test, the stagnation window, the
@@ -1066,6 +1087,28 @@ in CL, CD and tether force depending only on whether it was reached cold or
 from a warm start -- the warm start approaches from closer and so trips the
 gate much further from the fixed point. Any state handover, continuation or
 warm start is therefore only meaningful under the relative criterion.
+
+**The first relaxed iteration can pass any loose gate.** The residual is the
+load change between iterations, and the first Aitken step moves the shape by
+only `relaxation_factor` (0.05) of the structural update, so iteration 1 reads
+small whatever the distance to the fixed point. Measured on the Billow
+baseline (`run_simulation_BILLOW.py` inputs, 2026-10-12): 0.64 N = 1.5e-4 at
+iteration 1 with the tether force 4298 N, against a fixed point of 4468 N
+(-3.8%) reached at iteration 5 (3.3e-5). The 5 N gate exited there; 1e-4
+does not, but only by a factor 1.5 -- a looser relative gate (1e-3, the PSM
+sweeps' value) would.
+
+So both drivers have a second exit condition, `force_settle_rtol` (as_config
+1e-4; 0 or absent = off): `convergence.force_settle_state` requires at least
+`FORCE_SETTLE_WINDOW` (5) values of `|sum f_ext|` since the last tape step or
+stiffness change, and either their spread or the geometric-tail estimate of
+the change still to come (`remaining_drift`) within `rtol * |F|`. On the
+Billow baseline it holds the exit until iteration 7 (the residual gate alone
+passes at 5, by then within 0.01% of the final force). It gates the MAIN tier
+only; the PSM plateau fallback keeps its own acceptance, so a steered limit
+cycle wider than rtol now lands there, flagged `converged_at_fallback`,
+instead of passing the main gate at an arbitrary phase. Meta:
+`force_remaining_relative`, `force_settle_rtol`.
 
 ### Trim evaluation cap (quasi_steady_trim.max_nfev)
 
