@@ -125,6 +125,7 @@ def load_config(project_dir: Path | None = None) -> dict:
     wing_struct = kite_node.get("wing", {}).get("structure", {})
     bridle_struct = kite_node.get("bridle", {}).get("structure", {})
     control_sys_struct = kite_node.get("control_system", {}).get("structure", {})
+    turbine_struct = kite_node.get("control_system", {}).get("turbine") or {}
 
     tether_struct = get_tether(system_config).get("structure", {})
 
@@ -153,6 +154,10 @@ def load_config(project_dir: Path | None = None) -> dict:
             "total_nominal_line_length", 0.0
         ),
         "diameter_bridle_lines": bridle_struct.get("avg_line_diameter", 0.0),
+        # Optional onboard turbine (2019 LEI-V3 only); no block = no turbine.
+        # awes_ekf's KCU adds its thrust C_T pi (D/2)^2 to the crossflow drag.
+        "turbine_diameter": turbine_struct.get("diameter", 0.0),
+        "turbine_thrust_coefficient": turbine_struct.get("thrust_coefficient", 0.0),
     }
 
     # Build tether config
