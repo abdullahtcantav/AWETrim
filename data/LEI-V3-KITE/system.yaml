@@ -32,6 +32,11 @@ components:
         projected_surface_area: 17.2119 # m²
         span: 8.282                    # m
         mass: 10.9926                  # kg
+        # Canopy-only (no bridle, KCU or canopy-mounted equipment): element masses
+        # lumped onto the 20 LE/TE nodes of struc_geometry.yaml. CG and inertia are
+        # in that frame: origin at the bridle point (KCU), x chordwise LE -> TE,
+        # y spanwise, z up towards the wing. The inertia is about the CG, along
+        # those axes (not principal axes), with products -sum(m x z).
         center_of_mass:                         # m
         - -0.0413
         - -0.0
