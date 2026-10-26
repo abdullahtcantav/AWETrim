@@ -224,6 +224,33 @@ def test_system_yaml_winch_envelope_reaches_the_optimizer_limits():
     assert lim["winch_acceleration"] == model.hardware_limits["winch_acceleration"]
 
 
+def test_depower_box_is_clipped_to_the_rom_validity_band():
+    # The actuator range alone let the optimizer run the polynomial ROM far
+    # below the depower it was identified on.
+    import yaml
+
+    from awetrim.utils.config_paths import LEI_V3_SYSTEM_CONFIG
+    from awetrim.system.factory import resolve_rom_config_path
+
+    model = create_system_model_from_yaml(LEI_V3_SYSTEM_CONFIG)
+    with open(resolve_rom_config_path(LEI_V3_SYSTEM_CONFIG), encoding="utf-8") as f:
+        band = yaml.safe_load(f)["validity"]["input_depower"]
+    lo, hi = model.hardware_limits["input_depower"]
+
+    assert lo == pytest.approx(max(1.1, min(band)))
+    assert hi == pytest.approx(min(2.1, max(band)))
+
+
+def test_intersect_depower_validity_rules():
+    from awetrim.system.factory import intersect_depower_validity
+
+    assert intersect_depower_validity({"a": 1}, None) == {"a": 1}
+    hw = intersect_depower_validity({"input_depower": (1.1, 2.1)}, (1.6, 2.2))
+    assert hw["input_depower"] == (1.6, 2.1)
+    with pytest.raises(ValueError):
+        intersect_depower_validity({"input_depower": (1.1, 1.3)}, (1.6, 2.2))
+
+
 def test_legacy_config_yields_empty_hardware_limits(tmp_path):
     # The legacy format has no actuator-limit block -> the optimizer falls back
     # entirely to DEFAULT_OPTI_LIMITS.
