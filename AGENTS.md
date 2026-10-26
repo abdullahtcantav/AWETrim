@@ -138,7 +138,8 @@ src/awetrim/
                          C_beta (B-spline hull) + sim_parameters.
                          min_azimuth_amplitude (one smooth row in opti_phase).
                          Launcher: examples/server/run_reelout_server.py
-  experimental/      ✅  EKF flight-data analysis pipeline (+ data_preprocessors/)
+  flight_data/       ✅  reader of EKF-AWE output (load_flight -> FlightData); raw-log
+                         processing and the EKF itself live in EKF-AWE
   plotting/          ✅  shared plotting helpers — see src/awetrim/plotting/AGENTS.md
   utils/             ✅  fitting, defaults, reference frames, control_metrics
                          (steering-reversal count / pairs outside a deadband,
@@ -375,7 +376,7 @@ Each kite under `data/<kite_name>/` should include at minimum the following file
 - `aero_geometry.yaml` — VSM aerodynamic geometry describing wing sections, paneling, and references to airfoil polars; may reference a subfolder with airfoil `.dat` or polar CSVs.
 - `as_config.yaml` (or `aerostructural_configs/config.yaml`) — aerostructural solver settings (time-step, tolerances, actuation options, initialisation flags).
 - `rom_config*.yaml` — reduced-order aerodynamic coefficient definitions (one file per ROM; `system.yaml` `models.reduced_order.aerodynamics` names the one in use, else a sibling `rom_config.yaml` is used) (plus ROM tether settings) used by ROM or identification flows. A `controls.input_depower: {powered, depowered}` block states the depower band the ROM was identified on, in the ROM's own `u_p` unit (`identification.controls.rom_depower_band`; absent = the V3 power-tape metres 1.7/2.1, but the full-cycle scripts require it). An optional `validity.angle_of_attack_deg: [lo, hi]` states the AoA range the ROM was identified on (the full-cycle optimizer's AoA bound).
-- `ekf_config/` — EKF configuration files and model-specific tuning parameters used by the `experimental` EKF pipeline.
+- `system_flown_<date>.yaml` — the as-flown hardware of each flight. AWETrim maintains these; EKF-AWE reads them (`load_config(..., system_file=...)`), its own EKF configuration (`ekf_config.yaml`) lives in EKF-AWE.
 
 Optional but recommended:
 
