@@ -6,7 +6,7 @@ Schmehl 2026, WES 11, 1097, Sect. 5.1): every parameter of the ROM of that
 paper is taken from coupled VSM + Billow-wireframe solutions at the CENTRE OF
 THE WIND WINDOW (azimuth 0, elevation 0, gravity off) -- no flight data.
 
-Inputs (the _billow9 campaign, scripts/personal/wes-quasi-steady/results)
+Inputs (the _billow9 campaign, under the directory given by --results-root)
     center_sweep_2019_udp_continuation_billow9_va*        u_p chains, u_s = 0
     center_sweep_2019_us_continuation_reel{out,in}_billow9_va*   u_s chains
   per point: point.json (the coupled trim), alpha_polar.json (the frozen-
@@ -70,7 +70,6 @@ from awetrim.utils.config_paths import (
     REPO_ROOT,
 )
 
-DEFAULT_RESULTS = REPO_ROOT / "scripts" / "personal" / "wes-quasi-steady" / "results"
 OUT_DIR = REPO_ROOT / "results" / "LEI-V3-KITE" / "identification" / "rom_aerostructural"
 CHAIN_GLOBS = (
     "center_sweep_2019_udp_continuation_billow9_va*",
@@ -439,7 +438,8 @@ def rom_document(fits, theta, roll, polar, area, stall) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS)
+    parser.add_argument("--results-root", type=Path, required=True,
+                        help="directory holding the campaign's chain folders")
     parser.add_argument("--no-write", action="store_true",
                         help="fit and report, do not write the ROM config")
     args = parser.parse_args()
