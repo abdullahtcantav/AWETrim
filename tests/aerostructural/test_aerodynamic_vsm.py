@@ -113,3 +113,36 @@ def test_graph_is_cached_on_the_solver_and_reused(lei_v3):
     np.testing.assert_allclose(second["opt_x"], first["opt_x"], atol=1e-7)
     # a warm re-solve on the cached graph is far cheaper than the build
     assert second["casadi_trim"]["time_total_s"] < 0.5
+
+
+def test_pre_loop_trim_config_overrides_only_its_keys():
+    config = {
+        "is_with_gravity": True,
+        "quasi_steady_trim": {
+            "max_nfev": 8,
+            "yaw_bounds_deg": [-4.0, 4.0],
+            "pre_loop": {"yaw_bounds_deg": [-15.0, 15.0]},
+        },
+    }
+    pre = aerodynamic_vsm.pre_loop_trim_config(config)
+    assert pre["quasi_steady_trim"]["yaw_bounds_deg"] == [-15.0, 15.0]
+    assert pre["quasi_steady_trim"]["max_nfev"] == 8
+    assert pre["is_with_gravity"] is True
+    # the loop keeps its own bounds
+    assert config["quasi_steady_trim"]["yaw_bounds_deg"] == [-4.0, 4.0]
+
+
+def test_pre_loop_trim_config_without_block_is_unchanged():
+    config = {"quasi_steady_trim": {"yaw_bounds_deg": [-4.0, 4.0]}}
+    assert aerodynamic_vsm.pre_loop_trim_config(config) is config
+    assert aerodynamic_vsm.pre_loop_trim_config(None) is None
+
+
+def test_trim_just_inside_a_bound_counts_as_pinned():
+    """TRF stops strictly inside the box: yaw 3.9987 on [-4, 4] (40 deg
+    elevation, 2026-10-22) is pinned, an interior 3.0 is not."""
+    lo = [-2.0, -4.0, -4.0, -4.0, -2.5]
+    hi = [50.0, 4.0, 4.0, 4.0, 2.5]
+    pinned = aerodynamic_vsm._warn_if_trim_on_bounds([20.0, 0.0, 0.0, 3.9987, 0.0], lo, hi)
+    assert [(name, which) for name, _value, which in pinned] == [("yaw", "upper")]
+    assert aerodynamic_vsm._warn_if_trim_on_bounds([20.0, 0.0, 0.0, 3.0, 0.0], lo, hi) == []

@@ -888,7 +888,9 @@ def main(
         # quasi_steady_trim block, KCU drag. Not passed before 2026-10-07, so
         # every earlier Billow trim was TETHERLESS with the uncapped default
         # trim whatever as_config said; the wireframe driver always passed it.
-        config=config,
+        # The pre-loop trim sets the whole attitude, so it takes
+        # quasi_steady_trim.pre_loop.
+        config=aerodynamic_vsm.pre_loop_trim_config(config),
     )
 
     logging.debug(
