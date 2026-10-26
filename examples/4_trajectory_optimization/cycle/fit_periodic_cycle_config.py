@@ -114,14 +114,10 @@ _here = Path(__file__).resolve()
 _examples_dir = next(p for p in _here.parents if p.name == "examples")
 _repo_root = _examples_dir.parent
 _SRC_DIR = _repo_root / "src"
-_VALIDATION_DIR = _examples_dir / "5_flight_data"
-for _path in (_SRC_DIR, _VALIDATION_DIR):
+for _path in (_SRC_DIR,):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
-from validate_spline_v3 import (  # noqa: E402
-    cycles_from_phases,
-    read_results,
-)
+from awetrim.flight_data import cycles_from_phases, load_flight  # noqa: E402
 
 from cycle_kites import (  # noqa: E402
     DEFAULT_KITE,
@@ -1914,14 +1910,8 @@ def _load_experimental_cycle():
         return _load_protologger_cycle(FLIGHT["h5"], CYCLE_ID)
     if loader != "ekf_results":
         raise ValueError(f"Unknown flight loader {loader!r} for kite {KITE_NAME}")
-    ekf_df, flight_df, _ = read_results(
-        FLIGHT["year"],
-        FLIGHT["month"],
-        FLIGHT["day"],
-        FLIGHT["kite_model"],
-        addition="",
-        path_to_main=FLIGHT["path_to_main"],
-    )
+    flight = load_flight(FLIGHT["h5"])
+    ekf_df, flight_df = flight.ekf, flight.measured
     if "flight_phase_index" not in flight_df:
         raise RuntimeError("flight_phase_index column is required to derive cycles")
     flight_df["cycle_by_phase"] = cycles_from_phases(flight_df["flight_phase_index"])

@@ -85,13 +85,13 @@ import json
 from datetime import date
 from pathlib import Path
 
-import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yaml
 from scipy.spatial.transform import Rotation
 
+from awetrim.flight_data import load_flight
 from awetrim.aerodynamics.kcu_drag import force_drag_kcu
 from awetrim.identification import aero_polynomial as ap
 from awetrim.identification.controls import (
@@ -138,15 +138,11 @@ ENU2NED = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, -1.0]])
 
 # ───────────────────────────────────────────────────────────────── data
 def load_ekf(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
-    with h5py.File(path, "r") as hf:
-        ekf = pd.DataFrame({k: np.asarray(hf["ekf_output"][k][()])
-                            for k in hf["ekf_output"]
-                            if hf["ekf_output"][k].dtype.kind == "f"})
-        flight = pd.DataFrame({k: np.asarray(hf["flight_data"][k][()])
-                               for k in hf["flight_data"]
-                               if hf["flight_data"][k].dtype.kind in "fiub"})
-        config = {g: dict(hf["config_data"][g].attrs) for g in hf["config_data"]}
-    return ekf, flight, config
+    flight = load_flight(path)
+    ekf = flight.ekf[[k for k in flight.ekf if flight.ekf[k].dtype.kind == "f"]]
+    measured = flight.measured[[k for k in flight.measured
+                                if flight.measured[k].dtype.kind in "fiub"]]
+    return ekf, measured, flight.config
 
 
 def bridle_axis(ekf: pd.DataFrame) -> np.ndarray:
@@ -179,7 +175,7 @@ def roll_about_va(force, va, radial) -> np.ndarray:
     return np.arctan2(-np.sum(force * e_n, axis=1), np.sum(force * e_r, axis=1))
 
 
-def build_dataset(rom: dict) -> pd.DataFrame:
+def build_dataset(rom: dict, flight_file: Path = EKF_FILE) -> pd.DataFrame:
     with contextlib.redirect_stdout(io.StringIO()):
         factory = create_system_model_from_yaml(
             LEI_V3_SYSTEM_FLOWN_CONFIG, aero_yaml_path=LEI_V3_ROM_AEROSTRUCTURAL_CONFIG,
@@ -187,7 +183,7 @@ def build_dataset(rom: dict) -> pd.DataFrame:
     kite = factory.kite
     kcu = kite.kcu_drag_model
     m_kcu_rom = float(kite.mass_kcu)
-    ekf, flight, config = load_ekf(EKF_FILE)
+    ekf, flight, config = load_ekf(flight_file)
     area = float(config["kite"]["area"])
     m_kcu_ekf = float(config["kcu"]["mass"])
     rho = float(kite.rho)
@@ -525,13 +521,15 @@ def main() -> None:
                              "rom / bridle: keep the AS theta_b (comparisons)")
     parser.add_argument("--no-write", action="store_true",
                         help="fit and report, do not write the ROM config")
+    parser.add_argument("--flight", type=Path, default=EKF_FILE,
+                        help="EKF-AWE output file of the flight (default: %(default)s)")
     args = parser.parse_args()
     out_dir = OUT_DIR / f"alpha_{args.alpha}"
 
     rom = yaml.safe_load(LEI_V3_ROM_AEROSTRUCTURAL_CONFIG.read_text(encoding="utf-8"))
     params = rom["aerodynamics"]["params"]
     fits_as = ap.fits_from_rom_aerodynamics(rom["aerodynamics"])
-    full = build_dataset(rom)
+    full = build_dataset(rom, args.flight)
     check = full[full.phase != ""]
     print("D11 on the EKF bridle force vs the EKF's reported alpha: median "
           f"{np.rad2deg((check.alpha_b_ekf - check.alpha_b_ekf_reported).median()):+.3f} deg; "

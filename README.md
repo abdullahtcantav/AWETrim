@@ -79,7 +79,8 @@ src/awetrim/
   kinematics/      Course-frame kinematics and parametrised path patterns
   timeseries/      Phase / Reel-in / Cycle simulation
   environment/     Wind models (uniform, logarithmic, tabulated)
-  experimental/    EKF flight-data pipeline (EKF-AWE wrapper)
+  flight_data/     Reader for flights reconstructed by EKF-AWE (workflow step 5)
+  experimental/    EKF flight-data pipeline (EKF-AWE wrapper; moving to EKF-AWE)
   identification/  ROM aero-parameter and turn-rate-law identification
   plotting/        Shared kite + tether plotting helpers
   utils/           Reference frames, fitting, default bounds and limits

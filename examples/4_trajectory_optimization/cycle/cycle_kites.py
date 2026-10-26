@@ -181,8 +181,11 @@ def resolve_kite(kite: str | Path | None = None) -> dict:
     flight = dict(profile.get("flight") or {})
     if "h5" in flight and not Path(flight["h5"]).is_absolute():
         flight["h5"] = folder / flight["h5"]
-    if flight.get("loader") == "ekf_results":
-        flight.setdefault("path_to_main", str(folder))
+    if flight.get("loader") == "ekf_results" and "h5" not in flight:
+        # The EKF-AWE output, where step 5 keeps it: results/<kite>/ekf/.
+        date = f'{flight["year"]}-{flight["month"]}-{flight["day"]}'
+        flight["h5"] = (DATA_DIR.parent / "results" / folder.name / "ekf"
+                        / f'{flight["kite_model"]}_{date}.h5')
 
     return {
         "name": folder.name,

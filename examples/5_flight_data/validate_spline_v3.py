@@ -1,9 +1,10 @@
-import h5py
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import yaml
 
+from awetrim.flight_data import cycles_from_phases, load_flight
 from awetrim.kinematics.parametrized_patterns import (
     fit_bspline_pattern_to_trajectory,
 )
@@ -26,40 +27,6 @@ set_plot_style()
 # -----------------------------------------------------------------------------
 # Helpers to derive cycle IDs from flight phases
 # -----------------------------------------------------------------------------
-
-
-def cycles_from_phases(phase_series: pd.Series) -> np.ndarray:
-    """Return a cycle id per row using phase sequence 1->2->3->4 as a cycle.
-
-    The function collapses consecutive identical phases, looks for repeated
-    sequences [1, 2, 3, 4], and assigns cycle ids starting at 0 to the rows
-    that belong to each detected sequence. Rows outside detected cycles get -1.
-    """
-
-    phases = phase_series.to_numpy()
-    if phases.size == 0:
-        return np.array([], dtype=int)
-
-    # Collapse consecutive repeats so we can search for ordered runs
-    change_idx = np.flatnonzero(np.diff(phases) != 0) + 1
-    run_starts = np.concatenate(([0], change_idx))
-    run_values = phases[run_starts]
-    run_ends = np.concatenate((change_idx, [phases.size]))
-
-    cycle_ids = np.full(phases.shape, -1, dtype=int)
-    pattern = [1, 2, 3, 4]
-    cycle = -1
-
-    for i in range(len(run_values) - len(pattern) + 1):
-        if list(run_values[i : i + 4]) != pattern:
-            continue
-
-        cycle += 1
-        start_idx = run_starts[i]
-        end_idx = run_starts[i + 4] if i + 4 < len(run_starts) else phases.size
-        cycle_ids[start_idx:end_idx] = cycle
-
-    return cycle_ids
 
 
 # -----------------------------------------------------------------------------
@@ -153,62 +120,6 @@ def fit_winch_models_full_flight(flight_df: pd.DataFrame) -> dict:
 # -----------------------------------------------------------------------------
 
 
-def read_results(year, month, day, kite_model, addition="", path_to_main=""):
-    path = "./results/LEI-V3-KITE/ekf/"
-    date = f"{year}-{month}-{day}"
-    file_name = f"{kite_model}_{date}"
-    hdf5_path = path + file_name + addition + ".h5"
-    ekf_output_df, flight_data_df, config_data = read_results_from_hdf5(hdf5_path)
-    return ekf_output_df, flight_data_df, config_data
-
-
-def read_results_from_hdf5(hdf5_path):
-    with h5py.File(hdf5_path, "r") as hf:
-        ekf_group = hf["ekf_output"]
-        ekf_output_df = pd.DataFrame(
-            {
-                col: (
-                    ekf_group[col][:].astype(str)
-                    if ekf_group[col].dtype.kind == "S"
-                    else ekf_group[col][:]
-                )
-                for col in ekf_group.keys()
-            }
-        )
-
-        flight_group = hf["flight_data"]
-        flight_data_df = pd.DataFrame(
-            {
-                col: (
-                    flight_group[col][:].astype(str)
-                    if flight_group[col].dtype.kind == "S"
-                    else flight_group[col][:]
-                )
-                for col in flight_group
-                if isinstance(flight_group[col], h5py.Dataset)
-            }
-        )
-
-        config_group = hf["config_data"]
-        config_data = read_dict_from_group(config_group)
-
-    return ekf_output_df, flight_data_df, config_data
-
-
-def read_dict_from_group(group):
-    config_dict = {}
-    for key, value in group.attrs.items():
-        if isinstance(value, bytes):
-            value = value.decode("utf-8")
-        config_dict[key] = value
-
-    for subgroup_name in group:
-        subgroup = group[subgroup_name]
-        config_dict[subgroup_name] = read_dict_from_group(subgroup)
-
-    return config_dict
-
-
 # -----------------------------------------------------------------------------
 # Cycle simulation helper
 # -----------------------------------------------------------------------------
@@ -218,7 +129,6 @@ def simulate_cycle(
     cycle_id,
     ekf_df,
     flight_df,
-    path_to_main,
     downloop_cfg_path,
     m_per_second=1.0,
     npoints_per_second=2.0,
@@ -860,9 +770,7 @@ def simulate_cycle(
 
 def main():
     # Configuration
-    year, month, day = "2019", "10", "08"
-    kite_model = "LEI-V3-Kite"
-    path_to_main = "./data/LEI-V3-KITE"
+    flight_file = Path("results/LEI-V3-KITE/ekf/LEI-V3 Kite_2019-10-08.h5")
     cycle_id = 62  # set to an int to run a single cycle, None to run all detected
     downloop_cfg_path = str(LEI_V3_DOWNLOOP_SPLINE_CONFIG)
 
@@ -879,9 +787,8 @@ def main():
         )
     level_cfg = level_map[discretization_level]
 
-    ekf_df, flight_df, _ = read_results(
-        year, month, day, kite_model, addition="", path_to_main=path_to_main
-    )
+    flight = load_flight(flight_file)
+    ekf_df, flight_df = flight.ekf, flight.measured
 
     winch_models = fit_winch_models_full_flight(flight_df)
 
@@ -902,7 +809,6 @@ def main():
             cycle_id=cid,
             ekf_df=ekf_df,
             flight_df=flight_df,
-            path_to_main=path_to_main,
             downloop_cfg_path=downloop_cfg_path,
             m_per_second=level_cfg["m_per_second"],
             npoints_per_second=level_cfg["npoints_per_second"],
