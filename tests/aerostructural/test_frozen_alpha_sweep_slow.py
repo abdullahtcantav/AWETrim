@@ -65,13 +65,13 @@ AOA0_DEG = 6.0
 
 
 def _load_aero_scripts_common():
-    """Import scripts/aerodynamics/common.py under a unique name (no path clash).
+    """Import examples/aerodynamics/common.py under a unique name (no path clash).
 
-    Both scripts/aerodynamics/common.py and scripts/aerostructural/common.py are
+    Both examples/aerodynamics/common.py and examples/aerostructural/common.py are
     called ``common``; load this one under a distinct module name so it does not
     collide with the one used by the PSS slow test.
     """
-    path = REPO_ROOT / "scripts" / "aerodynamics" / "common.py"
+    path = REPO_ROOT / "examples" / "aerodynamics" / "common.py"
     spec = importlib.util.spec_from_file_location("aerodynamics_scripts_common", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

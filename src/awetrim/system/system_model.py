@@ -604,7 +604,7 @@ class SystemModel(KiteKinematics):
         assembled separately inside ``solve_quasi_steady``, where the numeric
         ``state_dict`` is available — keeping this method side-effect free
         for callers that build their own NLPs (see
-        ``scripts/.../solve_single_state.py``).
+        ``examples/aerodynamics/solve_single_state.py``).
         """
         lbx = []
         ubx = []

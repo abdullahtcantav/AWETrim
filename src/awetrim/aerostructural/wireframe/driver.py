@@ -7,7 +7,7 @@ geometry, build the VSM body and the structure, run the coupled fixed-point
 loop (which converges the quasi-steady trim against the deforming structure)
 and write ``sim_output.h5``, the deformed geometry snapshot and ``case.json``.
 
-Moved here from ``scripts/aerostructural/run_simulation_PSM.py`` on
+Moved here from ``examples/aerostructural/run_simulation_PSM.py`` on
 2026-10-07; that script now only sets the inputs and calls this function.
 """
 

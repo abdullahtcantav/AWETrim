@@ -41,23 +41,24 @@ pip install -e ../Billow
 
 ## Quickstart
 
-All scripts run from the **project root** and use the reference **TU Delft LEI-V3** kite in `data/LEI-V3-KITE/` (kite reference data: [awegroup/TUDELFT_V3_KITE](https://github.com/awegroup/TUDELFT_V3_KITE)):
+All examples run from the **project root** and use the reference **TU Delft LEI-V3** kite in `data/LEI-V3-KITE/` (kite reference data: [awegroup/TUDELFT_V3_KITE](https://github.com/awegroup/TUDELFT_V3_KITE)):
 
 ```bash
 # One VSM quasi-steady trim state
-python scripts/aerodynamics/solve_single_state.py
+python examples/aerodynamics/solve_single_state.py
 
 # One coupled VSM ↔ structure deformed-shape simulation (wireframe fidelity)
-python scripts/aerostructural/run_simulation_PSM.py
+python examples/aerostructural/run_simulation_PSM.py
 
 # The same, at full fidelity: inflatable tube beams + wrinkling membrane canopy
-python scripts/aerostructural/run_simulation_BILLOW.py
+python examples/aerostructural/run_simulation_BILLOW.py
 
-# Simulate a full pumping cycle with the ROM (add --optimize to maximise cycle power)
-python scripts/reduced-order-model/optimization/cycle/run_cycle_simulation.py --plot
+# Optimise a full pumping cycle with the reduced-order model (seed first, then optimise)
+python examples/reduced-order-model/optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto
+python examples/reduced-order-model/optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE
 ```
 
-Runnable examples are organised by domain under `scripts/`, each folder with its own README — start at [`scripts/README.md`](scripts/README.md).
+[`examples/README.md`](examples/README.md) lists one example per capability, each folder with its own README.
 
 ---
 
@@ -78,7 +79,7 @@ src/awetrim/
   utils/           Reference frames, fitting, default bounds and limits
 
 data/<kite>/       Per-kite configs (system, geometry, aerostructural, ROM, EKF)
-scripts/           Runnable examples by domain (see scripts/README.md)
+examples/          Runnable examples, one per capability (see examples/README.md)
 results/<kite>/    Solver outputs (aerostructural/, ekf/)
 ```
 

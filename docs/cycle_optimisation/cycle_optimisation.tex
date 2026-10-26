@@ -2,7 +2,7 @@
 % SPDX-License-Identifier: Apache-2.0
 %
 % Numbers, tables and figures come from generated/ and figures/, written by
-%   python scripts/reduced-order-model/optimization/cycle/report_cycle_optimisation.py
+%   python report_cycle_optimisation.py   (available on request)
 % Rebuild:  latexmk -pdf cycle_optimisation.tex   (in docs/cycle_optimisation/)
 \documentclass[11pt,a4paper]{article}
 
@@ -107,7 +107,7 @@ and Sect.~\ref{sec:seed} is the core of this note.
 The physics of the ROM is that of Cayon, van Deursen and
 Schmehl~\cite{cayon2026rom}; the trajectory-optimisation framing follows
 Cayon and Schmehl~\cite{cayon2026torque}. The code lives in
-\path{scripts/reduced-order-model/optimization/cycle/}
+\path{examples/reduced-order-model/optimization/cycle/}
 (\code{fit\_periodic\_cycle\_config.py}, \code{run\_full\_cycle\_opti.py}) and
 \path{src/awetrim/kinematics/parametrized_patterns.py} (path constructions,
 spline design and fairing) and \path{src/awetrim/timeseries/phase_parametrized.py}
@@ -742,10 +742,10 @@ IPOPT reports success.
 
 From the project root:
 \begin{enumerate}
-  \item \path{python scripts/reduced-order-model/optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto}
+  \item \path{python examples/reduced-order-model/optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto}
         (lobe seed), or \code{--reelin dubins --loops 7 --check} (Dubins seed);
-  \item \path{python scripts/reduced-order-model/optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE};
-  \item \path{python scripts/reduced-order-model/optimization/cycle/report_cycle_optimisation.py --run lobe=<kite dir> --run dubins=<kite dir> --logs <dir>},
+  \item \path{python examples/reduced-order-model/optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE};
+  \item \path{python report_cycle_optimisation.py --run lobe=<kite dir> --run dubins=<kite dir> --logs <dir>} (available on request),
         then \code{latexmk -pdf} in \path{docs/cycle_optimisation/}.
 \end{enumerate}
 The seed is written to \path{<kite>/cycle_configs/full_cycle_periodic_from_exp.yaml}

@@ -1,5 +1,5 @@
 # Full-cycle optimisation profile of the LEI-V3, read by
-# scripts/reduced-order-model/optimization/cycle/cycle_kites.py (--kite).
+# examples/reduced-order-model/optimization/cycle/cycle_kites.py (--kite).
 #
 # Hardware (mass, tether, drum envelope, KCU ranges) is in system.yaml; the
 # ROM and its depower band (controls.input_depower) are in rom_config.yaml.

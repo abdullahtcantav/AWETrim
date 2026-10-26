@@ -2,7 +2,7 @@
 the LEI-V3 kite and march the parametrised quasi-steady phase along each.
 
 Mirrors the flow in
-``scripts/reduced-order-model/optimization/reelout/{generate_spline_config,helix_pattern}.py``:
+``examples/reduced-order-model/optimization/reelout/{generate_spline_config,helix_pattern}.py``:
 generate path parameters from a named initial curve, drop them into the V3
 helix template config, build the V3 system model (rigid lumped tether), then
 run ``PhaseParameterized.run_simulation_phase``.
