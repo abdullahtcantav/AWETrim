@@ -6,7 +6,7 @@ potential energy. :func:`solve_deformation` is the whole pipeline -- config,
 geometry, VSM body, Billow model, coupled fixed-point loop -- and writes
 ``sim_output.h5``, the deformed geometry snapshot and ``case.json``.
 
-Moved here from ``examples/aerostructural/run_simulation_BILLOW.py`` on
+Moved here from ``examples/2_aerostructural/run_simulation_BILLOW.py`` on
 2026-10-07; that script now only sets the inputs and calls this function.
 
 Two things to know before reading a result:

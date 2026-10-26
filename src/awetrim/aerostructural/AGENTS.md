@@ -58,7 +58,7 @@ src/awetrim/aerostructural/
                                    resolve_kite_paths, build_system_model,
                                    build_actuation_case_folder,
                                    build_flight_case_folder. Was
-                                   examples/aerostructural/common.py until
+                                   examples/2_aerostructural/common.py until
                                    2026-10-07 (that file now re-exports it)
   case_view.py                     case.json (what a converged case looks like:
                                    wing surface, tubes, bridle lines with kind,
@@ -121,7 +121,7 @@ src/awetrim/aerostructural/
     driver.py                      solve_deformation: one whole wireframe case
                                    (config, geometry, VSM, structure, coupled
                                    loop, sim_output.h5 + snapshot + case.json).
-                                   Was in examples/aerostructural/
+                                   Was in examples/2_aerostructural/
                                    run_simulation_PSM.py until 2026-10-07.
                                    solve_deformation_reduced_fem: the same on
                                    the wireframe REDUCED from
@@ -153,7 +153,7 @@ src/awetrim/aerostructural/
   billow/
     __init__.py                    Re-exports the structural_billow API
     driver.py                      solve_deformation: one whole Billow case
-                                   (was examples/aerostructural/
+                                   (was examples/2_aerostructural/
                                    run_simulation_BILLOW.py until 2026-10-07)
     structural_billow.py           Adapts the full Billow model (cables,
                                    pulleys, inflatable Timoshenko tube beams,
@@ -167,7 +167,7 @@ src/awetrim/aerostructural/
                                    the same geometry starts from Billow's
                                    shape); tube_axial_stiffness = the beams' EA
 
-examples/aerostructural/            The PUBLIC demonstrator: keep it to these
+examples/2_aerostructural/            The PUBLIC demonstrator: keep it to these
   run_simulation_PSM.py            One wireframe case; an Inputs block (kite,
                                    elevation, azimuth, course, tether length,
                                    reel speed, wind, gravity, tapes) over

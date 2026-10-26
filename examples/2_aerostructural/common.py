@@ -1,7 +1,7 @@
 """Re-export of :mod:`awetrim.aerostructural.case` under its old script name.
 
 The helpers moved into the package on 2026-10-07. Scripts that put
-``examples/aerostructural`` on ``sys.path`` and ``import common`` keep working;
+``examples/2_aerostructural`` on ``sys.path`` and ``import common`` keep working;
 new code imports ``awetrim.aerostructural.case`` directly.
 """
 

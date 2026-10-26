@@ -20,7 +20,7 @@ casadi = pytest.importorskip("casadi")
 pytest.importorskip("VSM")
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_DIR / "examples" / "aerodynamics"))
+sys.path.insert(0, str(PROJECT_DIR / "examples" / "1_design"))
 from common import add_common_arguments, build_body, build_system_model, parsed_common  # noqa: E402
 
 from awetrim.aerodynamics.kcu_drag import KcuDragModel  # noqa: E402

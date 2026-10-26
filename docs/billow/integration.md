@@ -24,7 +24,7 @@ aerostructural/
   fem/aero2struc.py                      the load mapping, SHARED
   aerodynamic_vsm.py                     the trim, SHARED
   billow/structural_billow.py            NEW -- the only new physics-facing code
-examples/aerostructural/
+examples/2_aerostructural/
   run_simulation_BILLOW.py               NEW -- the driver script
 ```
 
@@ -729,7 +729,7 @@ Roughly in priority order.
 ## 7. Running it
 
 ```bash
-python examples/aerostructural/run_simulation_BILLOW.py
+python examples/2_aerostructural/run_simulation_BILLOW.py
 ```
 
 Results land in `results/<kite>/aerostructural/billow/<case>/` as

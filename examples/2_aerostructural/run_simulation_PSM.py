@@ -16,11 +16,11 @@ paper (awetrim.aerostructural.wireframe.driver.solve_deformation loads that).
 
 Edit the inputs below, then from the project root:
 
-    python examples/aerostructural/run_simulation_PSM.py
+    python examples/2_aerostructural/run_simulation_PSM.py
 
 The case is written to results/<KITE>/aerostructural/wireframe/<case>/ and, with
 SHOW_RESULT on, opened in the 3-D viewer with its trim characteristics (or
-afterwards: python examples/aerostructural/plot_simulation.py <case folder>).
+afterwards: python examples/2_aerostructural/plot_simulation.py <case folder>).
 Solver settings come from data/<KITE>/as_config.yaml.
 """
 

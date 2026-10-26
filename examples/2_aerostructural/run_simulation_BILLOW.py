@@ -9,11 +9,11 @@ scripts differ only in the structural model. About a minute.
 
 Edit the inputs below, then from the project root:
 
-    python examples/aerostructural/run_simulation_BILLOW.py
+    python examples/2_aerostructural/run_simulation_BILLOW.py
 
 The case is written to results/<KITE>/aerostructural/billow/<case>/ and, with
 SHOW_RESULT on, opened in the 3-D viewer with its trim characteristics (or
-afterwards: python examples/aerostructural/plot_simulation.py <case folder>).
+afterwards: python examples/2_aerostructural/plot_simulation.py <case folder>).
 Solver settings come from data/<KITE>/as_config.yaml (block structural_billow).
 """
 

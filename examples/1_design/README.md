@@ -1,7 +1,20 @@
-# Aerodynamics examples
+# Step 1: design
 
-Runnable examples built on the VSM quasi-steady trim layer
-(`awetrim.aerodynamics.vsm_quasi_steady`). Run them from the project root.
+Every step of the workflow reads the kite from one folder, `data/<kite>/`.
+To start from your own design, create that folder; `data/LEI-V3-KITE/` is the
+annotated reference.
+
+| File | What it describes |
+|------|-------------------|
+| `system.yaml` | Masses, inertia, KCU, tether and winch, in the [awesIO](https://github.com/awegroup/awesIO) format; also selects the ROM file the trajectory steps fly |
+| `aero_geometry.yaml` | The wing for the Vortex Step Method: sections and airfoils |
+| `struc_geometry_FEM_full.yaml` | The structure for Billow: tubes, canopy, bridle lines and pulleys (step 2) |
+| `as_config.yaml` | Solver settings of the coupled aerostructural simulation (step 2) |
+
+The examples here check a design before the heavier steps: one quasi-steady
+trim on the undeformed wing, and its static stability. They are built on the
+VSM quasi-steady trim layer (`awetrim.aerodynamics.vsm_quasi_steady`). Run
+them from the project root.
 
 Shared CLI helpers live in [`common.py`](common.py): the operating-point flags
 (`--elevation-deg`, `--azimuth-deg`, `--course-deg`, `--wind-speed`,

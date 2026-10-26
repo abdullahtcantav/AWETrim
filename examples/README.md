@@ -1,48 +1,58 @@
 # AWETrim examples
 
-A short tour of what AWETrim does, one runnable example per capability. Run
-every example **from the project root**. They all use the TU Delft LEI-V3
-kite in `data/LEI-V3-KITE/`.
+AWETrim takes a kite from its design to optimised flight trajectories. The
+examples follow that workflow, one folder per step. Each step writes files
+that the next one reads, so the chain also works for your own kite. Run every
+example **from the project root**. They all use the TU Delft LEI-V3 kite in
+`data/LEI-V3-KITE/`.
 
-| Capability | Example | What it shows |
-|------------|---------|---------------|
-| Aerodynamic trim | [`aerodynamics/solve_single_state.py`](aerodynamics/solve_single_state.py) | One quasi-steady VSM trim state of the kite and tether |
-| Static stability | [`aerodynamics/compute_stability_derivatives.py`](aerodynamics/compute_stability_derivatives.py) | Stability derivatives about a trim and the six-channel static-stability verdict |
-| Aerostructural, wireframe | [`aerostructural/run_simulation_PSM.py`](aerostructural/run_simulation_PSM.py) | Coupled VSM and structure, converged deformed shape (under a minute) |
-| Aerostructural, full Billow | [`aerostructural/run_simulation_BILLOW.py`](aerostructural/run_simulation_BILLOW.py) | The same with inflatable tube beams and a wrinkling canopy (about a minute) |
-| Result viewer | [`aerostructural/plot_simulation.py`](aerostructural/plot_simulation.py) | Interactive 3-D page of a converged case with its trim table |
-| Reel-out patterns | [`reduced-order-model/optimization/reelout/`](reduced-order-model/optimization/reelout/) | Down-loop and helix reel-out loops simulated with the reduced-order model |
-| Full pumping cycle | [`reduced-order-model/optimization/cycle/run_full_cycle_opti.py`](reduced-order-model/optimization/cycle/run_full_cycle_opti.py) | Optimise a whole pumping cycle for mean power |
-| Flight validation | [`reduced-order-model/validation/validate_quasi_steady_state_v3.py`](reduced-order-model/validation/validate_quasi_steady_state_v3.py) | Reduced-order model against the 2019 LEI-V3 flight |
-| REST server | [`server/`](server/) | The reel-out optimiser as a web service, with Python, Julia and MATLAB clients |
-
-Quick start:
-
-```bash
-python examples/aerodynamics/solve_single_state.py
-python examples/aerostructural/run_simulation_PSM.py
-python examples/reduced-order-model/optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto
-python examples/reduced-order-model/optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE
+```
+ 1 design ──► 2 aerostructural ──► 3 ROM identification ──► 4 trajectory optimisation
+ data/<kite>/   deformed shapes,       rom_config_*.yaml          cycle_configs/,
+ (your kite)    identification         (the reduced-order         optimised paths
+                dataset                 model)                         ▲
+                                            ▲                          │
+                                            │                     server/ (as a service)
+                         5 flight data ─────┘
+                         EKF-AWE output (.h5): correct and validate the ROM
 ```
 
-Each folder has its own README with the options and outputs.
+| Step | Folder | What it does | Writes |
+|------|--------|--------------|--------|
+| 1 | [`1_design/`](1_design/) | Describe the kite in `data/<kite>/`, solve one quasi-steady VSM trim and check its static stability | `results/aerodynamics/` |
+| 2 | [`2_aerostructural/`](2_aerostructural/) | Couple VSM and the Billow structure to the deformed shape the kite flies in, at wireframe or full fidelity; sweep the operating range for step 3 | `results/<kite>/aerostructural/` |
+| 3 | [`3_rom_identification/`](3_rom_identification/) | Identify the reduced-order model (ROM) from the step-2 sweep: lift, drag, bridle pitch and roll gain | `data/<kite>/rom_config_aerostructural.yaml` |
+| 4 | [`4_trajectory_optimization/`](4_trajectory_optimization/) | Simulate and optimise reel-out patterns and whole pumping cycles with the ROM | `data/<kite>/cycle_configs/`, `results/<kite>/optimization/` |
+| 5 | [`5_flight_data/`](5_flight_data/) | Optional, with flight data: correct the ROM's depower pitch and drag on a flight, and validate it against the measurements | `data/<kite>/rom_config_aerostructural_flight_corrected.yaml` |
+| | [`server/`](server/) | Step 4 as a REST service, with Python, Julia and MATLAB clients | |
+
+Quick start, steps 1, 2 and 4 on the shipped LEI-V3 ROM:
+
+```bash
+python examples/1_design/solve_single_state.py
+python examples/2_aerostructural/run_simulation_PSM.py
+python examples/4_trajectory_optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto
+python examples/4_trajectory_optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE
+```
+
+Each folder's README lists its options and outputs.
 
 ## Flight data
 
-The validation examples compare against the 2019-10-08 LEI-V3 flight as
-reconstructed by the extended Kalman filter in
-[EKF-AWE](https://github.com/awegroup/EKF-AWE), which ships the raw flight
-log. Run EKF-AWE on that log and place its output at
+Step 5 reads a flight as reconstructed by the extended Kalman filter in
+[EKF-AWE](https://github.com/awegroup/EKF-AWE): AWETrim only consumes its
+output file. EKF-AWE ships the raw LEI-V3 flight logs; run it on the
+2019-10-08 flight and place the output at
 `results/LEI-V3-KITE/ekf/LEI-V3 Kite_2019-10-08.h5`.
 
 ## Conventions
 
-- Results go to `results/<kite>/<analysis>/` (aerodynamics examples:
-  `results/aerodynamics/<script>/`, override with `--output-dir`).
 - Everything about a kite comes from the YAML files in `data/<kite>/`
-  (`system.yaml`, `aero_geometry.yaml`, `struc_geometry*.yaml`,
-  `as_config.yaml`, `cycle_profile.yaml`, `cycle_configs/`).
+  (`system.yaml`, `aero_geometry.yaml`, `struc_geometry_FEM_full.yaml`,
+  `as_config.yaml`, the ROM files, `cycle_profile.yaml`, `cycle_configs/`).
+  `system.yaml` selects which ROM file the trajectory steps use.
+- Results go to `results/<kite>/<analysis>/` (step 1: `results/aerodynamics/<script>/`,
+  override with `--output-dir`).
 
-The research studies behind the papers and notes in `docs/` (parameter
-identification, Billow studies, solver comparisons) are not part of the
-examples; their scripts are available on request.
+The research studies behind the papers and notes in `docs/` are not part of
+the examples; their scripts are available on request.

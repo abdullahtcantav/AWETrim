@@ -114,7 +114,7 @@ _here = Path(__file__).resolve()
 _examples_dir = next(p for p in _here.parents if p.name == "examples")
 _repo_root = _examples_dir.parent
 _SRC_DIR = _repo_root / "src"
-_VALIDATION_DIR = _examples_dir / "reduced-order-model" / "validation"
+_VALIDATION_DIR = _examples_dir / "5_flight_data"
 for _path in (_SRC_DIR, _VALIDATION_DIR):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))

@@ -26,17 +26,17 @@ def _load(relpath, name):
 @pytest.fixture(scope="module")
 def aero_common():
     try:
-        return _load("examples/aerodynamics/common.py", "scripts_aero_common")
+        return _load("examples/1_design/common.py", "scripts_aero_common")
     except Exception as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"cannot import examples/aerodynamics/common.py: {exc}")
+        pytest.skip(f"cannot import examples/1_design/common.py: {exc}")
 
 
 @pytest.fixture(scope="module")
 def as_common():
     try:
-        return _load("examples/aerostructural/common.py", "scripts_as_common")
+        return _load("examples/2_aerostructural/common.py", "scripts_as_common")
     except Exception as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"cannot import examples/aerostructural/common.py: {exc}")
+        pytest.skip(f"cannot import examples/2_aerostructural/common.py: {exc}")
 
 
 # --- csv_vector -------------------------------------------------------------

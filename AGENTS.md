@@ -154,13 +154,13 @@ src/awetrim/
                          (aero LUT guide is outdated and needs revising)
 ```
 
-ROM is **script-based**, not a `src/` module: see `examples/reduced-order-model/`
+ROM is **script-based**, not a `src/` module: see `examples/4_trajectory_optimization/`
 (`optimization/`, `validation/`), configured via the ROM config the kite's
 `system.yaml` selects (`models.reduced_order.aerodynamics`, resolved by
 `system.factory.resolve_rom_config_path`; fallback a sibling `rom_config.yaml`).
 The LEI-V3 has two: `rom_config_aerostructural.yaml` (identified from the coupled
 Billow-wireframe centre-window simulations only, by
-`identify_rom_aerostructural.py` (available on request)) and
+`examples/3_rom_identification/identify_rom_aerostructural.py`) and
 `rom_config_aerostructural_flight_corrected.yaml` (the DEFAULT in every
 LEI-V3 system file: the aerostructural one with
 theta_b and a single-input dC_D(u_p, u_s^2) fitted to 2019 flight, cycles 60-67
@@ -345,8 +345,8 @@ Common commands
 Scripts
 
  - Scripts live in `examples/` and are executed from the project root, for example:
-   - python examples/aerostructural/run_simulation_PSM.py
-   - python examples/aerodynamics/solve_single_state.py
+   - python examples/2_aerostructural/run_simulation_PSM.py
+   - python examples/1_design/solve_single_state.py
    - python run_analysis_ekf.py   (available on request)
 
 External dependencies referenced by `pyproject.toml` (VCS installs):
@@ -363,8 +363,8 @@ Notes
 
  - The `aerodynamics/` module uses the VSM solver via an adapter; see `src/awetrim/aerodynamics/AGENTS.md` for module-specific guidance.
  - `PSS` (Particle System Simulator) and `kite_fem` were removed on 2026-09-12. Billow replaced both; do not reintroduce either. `tests/aerostructural/test_wireframe_package.py` asserts that importing the package pulls in neither.
- - `awetrim.aerostructural.case` defines `CONFIG_DEFAULTS` and the case helpers used by the aerostructural drivers and scripts (`examples/aerostructural/common.py` re-exports it); prefer importing it for consistent defaults.
- - `examples/aerostructural/` is the public demonstrator: `run_simulation_PSM.py` / `run_simulation_BILLOW.py` (edit the Inputs block) and `plot_simulation.py` (trim table + 3-D viewer). Studies cited by `docs/billow/` live in `studies/` (available on request).
+ - `awetrim.aerostructural.case` defines `CONFIG_DEFAULTS` and the case helpers used by the aerostructural drivers and scripts (`examples/2_aerostructural/common.py` re-exports it); prefer importing it for consistent defaults.
+ - `examples/2_aerostructural/` is the public demonstrator: `run_simulation_PSM.py` / `run_simulation_BILLOW.py` (edit the Inputs block) and `plot_simulation.py` (trim table + 3-D viewer). Studies cited by `docs/billow/` live in `studies/` (available on request).
 
 ## Per-kite data layout
 
@@ -381,7 +381,7 @@ Optional but recommended:
 
 - `flight_logs/` — raw flight CSVs for EKF and identification.
 - `cycle_configs/` — trajectory/pattern YAMLs for timeseries scripts (downloop, uploop, helix, etc.).
-- `cycle_profile.yaml` — inputs of the full-cycle scripts (`examples/reduced-order-model/optimization/cycle/`, `--kite <folder>`): wind, winch force law and seed size (r0, duration prior, figure-eight/reel-in size), all required; see `cycle_kites.py` and the annotated LEI-V3 file. An optional `uploop_eight:` block (lobe centres/radii in rad, `sense`, depower window, the height band `min_height_m` / `max_height_m` (z = r sin β, the node-wise `height` rows — the binding vertical limit, shared with the `--baseline-seed` cycle; the C_beta hull stays loose), stall margin, turn-radius floor, `r0_max_m` (upper r0 bound; the tether length in system.yaml still caps r) and its OWN `wind`) feeds `run_uploop_eight_opti.py`; an optional `symmetric_eight:` block (az_center, az_offset, el_center, radius, sense; reelin/ramp fractions optional) is the level eight of its `--shape symmetric` (climbing at both sides, two reel-in windows, symmetric C_phi box; `--symmetric` adds the mirror rows). Data folders of kites whose data must stay private (e.g. `data/LEI-V9-KITE/`) are git-ignored; nothing kite-specific lives in code.
+- `cycle_profile.yaml` — inputs of the full-cycle scripts (`examples/4_trajectory_optimization/cycle/`, `--kite <folder>`): wind, winch force law and seed size (r0, duration prior, figure-eight/reel-in size), all required; see `cycle_kites.py` and the annotated LEI-V3 file. An optional `uploop_eight:` block (lobe centres/radii in rad, `sense`, depower window, the height band `min_height_m` / `max_height_m` (z = r sin β, the node-wise `height` rows — the binding vertical limit, shared with the `--baseline-seed` cycle; the C_beta hull stays loose), stall margin, turn-radius floor, `r0_max_m` (upper r0 bound; the tether length in system.yaml still caps r) and its OWN `wind`) feeds `run_uploop_eight_opti.py`; an optional `symmetric_eight:` block (az_center, az_offset, el_center, radius, sense; reelin/ramp fractions optional) is the level eight of its `--shape symmetric` (climbing at both sides, two reel-in windows, symmetric C_phi box; `--symmetric` adds the mirror rows). Data folders of kites whose data must stay private (e.g. `data/LEI-V9-KITE/`) are git-ignored; nothing kite-specific lives in code.
 
 Results layout (convention):
 

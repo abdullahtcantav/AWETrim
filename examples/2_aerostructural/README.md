@@ -1,4 +1,4 @@
-# Aerostructural simulation
+# Step 2: aerostructural deformation
 
 Simulate the kite as a flexible structure in flight: the aerodynamic loads from
 the Vortex Step Method (VSM) and the deformation from the structural solver
@@ -28,8 +28,8 @@ geometry of the wes-quasi-steady paper; `awetrim.aerostructural.wireframe.driver
 still solves that one.
 
 ```bash
-python examples/aerostructural/run_simulation_PSM.py
-python examples/aerostructural/run_simulation_BILLOW.py
+python examples/2_aerostructural/run_simulation_PSM.py
+python examples/2_aerostructural/run_simulation_BILLOW.py
 ```
 
 The inputs:
@@ -49,7 +49,7 @@ Each run writes its own case folder, named after its inputs, under
 - `sim_output.h5`: node positions, forces and the solver history
 - `case.json`: what to draw (wing, tubes, bridle lines with names and tensions) and the flight state
 - `config.yaml`, plus the deformed `aero_geometry.yaml` / `struc_geometry.yaml`, which other
-  scripts can reuse (e.g. `examples/aerodynamics/solve_single_state.py --deformed-from <case>`)
+  scripts can reuse (e.g. `examples/1_design/solve_single_state.py --deformed-from <case>`)
 
 Solver settings (tolerances, panel counts, the material model) come from the
 kite's `as_config.yaml`.
@@ -57,8 +57,8 @@ kite's `as_config.yaml`.
 ## 2. Look at the result
 
 ```bash
-python examples/aerostructural/plot_simulation.py              # newest case
-python examples/aerostructural/plot_simulation.py <case folder>
+python examples/2_aerostructural/plot_simulation.py              # newest case
+python examples/2_aerostructural/plot_simulation.py <case folder>
 ```
 
 The run scripts do this automatically when they finish (`SHOW_RESULT = True`).

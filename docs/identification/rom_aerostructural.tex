@@ -1186,15 +1186,15 @@ From the repository root:
 \begin{enumerate}
   \item \path{run_center_sweep_alpha_polar.py} (available on request)
         (pinned VSM) for the frozen-shape polars;
-  \item \path{identify_rom_aerostructural.py} (available on request), which
+  \item \path{examples/3_rom_identification/identify_rom_aerostructural.py}, which
         writes the ROM file and the tidy datasets;
   \item \path{validate_rom_aerostructural.py} (available on request) and
         \path{plot_rom_comparison.py};
-  \item \path{examples/reduced-order-model/validation/validate_quasi_steady_state_v3.py}
+  \item \path{examples/5_flight_data/validate_quasi_steady_state_v3.py}
         with \path{--rom <rom> --steering solved|measured}, then
         \path{plot_rom_flight_validation.py};
   \item for the flight correction:
-        \path{identify_rom_flight_correction.py} (available on request)
+        \path{examples/5_flight_data/identify_rom_flight_correction.py}
         (steps 1--2, writes the ROM file); the validator with
         \path{--rom aerostructural_flight --steering solved --out}
         on training cycles 20--27, 40--47 and 75--82, into

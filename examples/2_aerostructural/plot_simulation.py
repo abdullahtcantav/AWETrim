@@ -8,9 +8,9 @@ to zoom), the bridle shaded by line tension and the same table beside it.
 
 From the project root:
 
-    python examples/aerostructural/plot_simulation.py                # newest case
-    python examples/aerostructural/plot_simulation.py <case folder>
-    python examples/aerostructural/plot_simulation.py <case folder> --no-open
+    python examples/2_aerostructural/plot_simulation.py                # newest case
+    python examples/2_aerostructural/plot_simulation.py <case folder>
+    python examples/2_aerostructural/plot_simulation.py <case folder> --no-open
 
 Nothing is re-solved; everything is read from the case folder (sim_output.h5,
 case.json, config.yaml).

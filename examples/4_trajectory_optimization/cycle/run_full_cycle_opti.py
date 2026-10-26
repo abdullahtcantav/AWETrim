@@ -31,7 +31,7 @@ re-simulation -- and saved as PNGs next to the optimized YAML/CSV in
 shows them interactively.
 
 Usage:
-    python examples/reduced-order-model/optimization/cycle/run_full_cycle_opti.py
+    python examples/4_trajectory_optimization/cycle/run_full_cycle_opti.py
         [--kite KITE_FOLDER] [--plot] [--no-optimize]
 """
 

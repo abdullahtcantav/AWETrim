@@ -7,7 +7,13 @@
 
 [![Interactive framework](https://img.shields.io/badge/website-AWETrim%20interactive%20framework-2563eb?style=flat-square&logo=githubpages&logoColor=white)](https://awegroup.github.io/AWETrim/)
 
-AWETrim is a Python library for the modelling, trim analysis, aerostructural simulation, and trajectory optimisation of soft-kite Airborne Wind Energy Systems (AWES). It couples a vortex aerodynamic method (VSM), a minimum-energy structural solver ([Billow](https://github.com/awegroup/Billow)) and a flight-data Kalman filter (EKF-AWE) to a CasADi-based system model: the aerostructural coupling produces loaded wing shapes and force coefficients, these are reduced to a fast quasi-steady reduced-order model (ROM), and the ROM drives power-cycle simulation and path optimisation.
+AWETrim is a Python library that takes a soft kite for Airborne Wind Energy from its design to optimised flight trajectories. The workflow:
+
+1. **Design**: describe the kite (geometry, structure, masses, tether, winch) in one folder.
+2. **Aerostructural deformation**: couple a vortex aerodynamic method ([VSM](https://github.com/awegroup/Vortex-Step-Method)) with a minimum-energy structural solver ([Billow](https://github.com/awegroup/Billow)) to get the deformed shape the kite flies in.
+3. **ROM identification**: reduce those simulations to a fast quasi-steady reduced-order model (ROM).
+4. **Trajectory optimisation**: simulate and optimise reel-out patterns and whole pumping cycles with the ROM, in a CasADi-based system model.
+5. **Flight data** (optional): with a flight reconstructed by [EKF-AWE](https://github.com/awegroup/EKF-AWE), correct the ROM and validate it against the measurements.
 
 > **Explore the [interactive framework diagram](https://awegroup.github.io/AWETrim/)** — click any block (inputs, experimental reconstruction, the multi-fidelity core, outputs & applications) to see what it does, the figures it produces, and the code and papers behind it. The site also lists the related repositories, open flight-data sets and publications.
 
@@ -45,20 +51,20 @@ All examples run from the **project root** and use the reference **TU Delft LEI-
 
 ```bash
 # One VSM quasi-steady trim state
-python examples/aerodynamics/solve_single_state.py
+python examples/1_design/solve_single_state.py
 
 # One coupled VSM ↔ structure deformed-shape simulation (wireframe fidelity)
-python examples/aerostructural/run_simulation_PSM.py
+python examples/2_aerostructural/run_simulation_PSM.py
 
 # The same, at full fidelity: inflatable tube beams + wrinkling membrane canopy
-python examples/aerostructural/run_simulation_BILLOW.py
+python examples/2_aerostructural/run_simulation_BILLOW.py
 
 # Optimise a full pumping cycle with the reduced-order model (seed first, then optimise)
-python examples/reduced-order-model/optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto
-python examples/reduced-order-model/optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE
+python examples/4_trajectory_optimization/cycle/fit_periodic_cycle_config.py --kite LEI-V3-KITE --auto
+python examples/4_trajectory_optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE
 ```
 
-[`examples/README.md`](examples/README.md) lists one example per capability, each folder with its own README.
+[`examples/`](examples/README.md) has one folder per workflow step, `1_design/` to `5_flight_data/`, each with its own README.
 
 ---
 
@@ -79,7 +85,7 @@ src/awetrim/
   utils/           Reference frames, fitting, default bounds and limits
 
 data/<kite>/       Per-kite configs (system, geometry, aerostructural, ROM, EKF)
-examples/          Runnable examples, one per capability (see examples/README.md)
+examples/          Runnable examples, one folder per workflow step (see examples/README.md)
 results/<kite>/    Solver outputs (aerostructural/, ekf/)
 ```
 

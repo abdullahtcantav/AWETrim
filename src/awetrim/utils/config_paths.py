@@ -43,7 +43,7 @@ LEI_V3_SYSTEM_FLOWN_CONFIG = LEI_V3_SYSTEM_FLOWN_2019_CONFIG
 LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG = LEI_V3_DATA_DIR / "rom_config_semi_empirical.yaml"
 LEI_V3_ROM_AEROSTRUCTURAL_CONFIG = LEI_V3_DATA_DIR / "rom_config_aerostructural.yaml"
 # The aerostructural ROM with theta_b and dC_D(u_p, u_s) fitted to 2019 flight
-# (identify_rom_flight_correction.py (available on request)).
+# (examples/5_flight_data/identify_rom_flight_correction.py).
 LEI_V3_ROM_AEROSTRUCTURAL_FLIGHT_CONFIG = (
     LEI_V3_DATA_DIR / "rom_config_aerostructural_flight_corrected.yaml"
 )
