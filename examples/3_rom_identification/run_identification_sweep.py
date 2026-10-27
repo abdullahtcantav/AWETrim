@@ -32,12 +32,20 @@ sim_output.h5 saved; an unfinished Billow chain is solved again from its
 start (its beam frames are not saved). A state that does not converge ends
 its chain. About a minute per anchor.
 
+Optional `start_from_converged` (wireframe): before the chains, the built
+tape is solved at every wind, walking the wind up and down on one structure
+until each wind's state is converged with |course rate| below a tolerance
+(results/.../sweep/base/); every chain then starts from its wind's base state
+instead of the unloaded build, whose first iterations can settle on a
+one-tip-stalled, turning state with zero steering.
+
 Usage (project root):
     python examples/3_rom_identification/run_identification_sweep.py
     python examples/3_rom_identification/run_identification_sweep.py --fidelity wireframe
     python examples/3_rom_identification/run_identification_sweep.py --chains w4.0_depower_2.60
     python examples/3_rom_identification/run_identification_sweep.py --chains w5.0_depower_1.35 w5.0_depower_2.60
     python examples/3_rom_identification/run_identification_sweep.py --list
+    python examples/3_rom_identification/run_identification_sweep.py --base-only
 """
 
 from __future__ import annotations
@@ -62,6 +70,7 @@ from awetrim.identification import aerostructural_dataset as ds
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DONE_MARKER = "chain_done"
+BASE_DIR = "base"
 LOCK_FILE = ".sweep_files.lock"
 LOCK_STALE_S = 120.0  # a lock this old was left by a killed run
 
@@ -162,16 +171,78 @@ def prepare(driver, case, spec: dict, config: dict):
     return prepared
 
 
+def base_state_path(out: Path, wind_speed: float) -> Path:
+    return out / BASE_DIR / f"w{wind_speed:.1f}" / "sim_output.h5"
+
+
+def solve_base_states(driver, case, spec: dict, out: Path) -> None:
+    """The converged unsteered state at the built tape, one per wind, that
+    every chain starts from (``start_from_converged`` in identification.yaml;
+    wireframe only, it needs ``restore``).
+
+    A cold solve from the unloaded build is a poor start: at the trimmed
+    attitude the built tips are past stall, the stalled circulation is
+    multi-valued and the first iterations can settle on a one-tip-stalled,
+    turning state with zero steering (V3Kite emulation 2026-10-28: 0.05-0.08
+    rad/s at 3 and 6 m/s). One structure is therefore walked through the
+    winds, up then down, each solve starting from the previous wind's shape,
+    until every wind's latest state converged with |course rate| below
+    ``course_rate_tol``: from a converged neighbour the sideways mode dies
+    out (1e-7 rad/s).
+    """
+    settings = spec["start_from_converged"] or {}
+    tol = float(settings.get("course_rate_tol", 1e-4))
+    max_passes = int(settings.get("max_passes", 4))
+    done = out / BASE_DIR / DONE_MARKER
+    if done.exists():
+        print(f"base states: done, skipped ({done})", flush=True)
+        return
+    winds = sorted(float(w) for w in spec["wind_speeds"])
+    config = copy.deepcopy(case.config)
+    config["power_tape_final_extension"] = 0.0
+    config["power_tape_extension_step"] = float(spec["depower"]["step"])
+    config["steering_tape_final_extension"] = 0.0
+    config["steering_tape_extension_step"] = float(spec["steering"]["step"])
+    config["wind_speed_wind_ref"] = winds[0]
+    prepared = prepare(driver, case, spec, config)
+    latest = {}
+    for n_pass in range(max_passes):
+        order = winds if n_pass % 2 == 0 else winds[::-1]
+        for wind in order[1:] if n_pass else order:  # a turn re-solves no wind twice
+            started = time.perf_counter()
+            config["wind_speed_wind_ref"] = wind
+            tracking, meta = driver.solve_step(case, prepared, config, final_state={})
+            path = base_state_path(out, wind)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            save_sim_output(tracking, meta, path.parent)
+            course_rate = float(np.ravel(meta["opt_x"])[4])
+            latest[wind] = (bool(meta["converged"]), course_rate)
+            print(f"  base pass {n_pass + 1}, wind {wind:.1f} m/s: course rate {course_rate:+.2e} rad/s, "
+                  f"{meta['n_iter']} it, {'converged' if meta['converged'] else 'NOT CONVERGED'} "
+                  f"| {(time.perf_counter() - started) / 60:.1f} min", flush=True)
+        if all(ok and abs(rate) < tol for ok, rate in latest.values()):
+            done.write_text("".join(f"{w:.1f} {r:+.3e}\n" for w, (_, r) in sorted(latest.items())),
+                            encoding="utf-8")
+            return
+    raise SystemExit(
+        f"base states not clean after {max_passes} passes (|course rate| < {tol}): "
+        + ", ".join(f"{w:.1f} m/s {r:+.2e}{'' if ok else ' unconverged'}" for w, (ok, r) in sorted(latest.items()))
+    )
+
+
 def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 0) -> int:
     """Solve one chain from step ``start``, appending its anchors to the
     sweep files. A chain resumed past its first step starts from the
-    structure saved with step ``start - 1``. Returns the chain's number of
-    anchors."""
+    structure saved with step ``start - 1``; a fresh one from its wind's
+    base state when the sweep has them (``start_from_converged``), else
+    from the build. Returns the chain's number of anchors."""
     config = copy.deepcopy(case.config)
     config["wind_speed_wind_ref"] = float(chain.wind_speed)
     prepared = prepare(driver, case, spec, config)
     if start:
         prepared.restore(out / chain.name / f"step_{start - 1:02d}" / "sim_output.h5")
+    elif spec.get("start_from_converged"):
+        prepared.restore(base_state_path(out, chain.wind_speed))
     lo, hi, inc = spec["polar_d_alpha_deg"]
     d_alpha = np.round(np.arange(lo, hi + 0.5 * inc, inc), 9)
     m_arr = np.asarray(prepared.m_arr, dtype=float)
@@ -292,6 +363,9 @@ def main() -> None:
                         help="structural model (default: identification.yaml's)")
     parser.add_argument("--chains", nargs="+", help="solve only these chains")
     parser.add_argument("--list", action="store_true", help="list the chains and exit")
+    parser.add_argument("--base-only", action="store_true",
+                        help="solve the base states (start_from_converged) and exit; "
+                        "run this first before launching parallel --chains runs")
     args = parser.parse_args()
 
     fidelity, spec = ds.identification_settings(
@@ -313,6 +387,14 @@ def main() -> None:
 
     print(f"{args.kite} ({fidelity}): built power-tape length {built:.3f} m, {len(chains)} chains "
           f"-> {out}", flush=True)
+    if spec.get("start_from_converged"):
+        if fidelity != "wireframe":
+            raise SystemExit("start_from_converged needs the wireframe (Billow cannot restore a state)")
+        solve_base_states(driver, case, spec, out)
+    elif args.base_only:
+        raise SystemExit("--base-only: identification.yaml sets no start_from_converged")
+    if args.base_only:
+        return
     for chain in chains:
         if (out / chain.name / DONE_MARKER).exists():
             print(f"{chain.name}: done, skipped", flush=True)
