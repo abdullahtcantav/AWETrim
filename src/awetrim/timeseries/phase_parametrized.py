@@ -47,6 +47,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+#: Functions ``residual_solver`` stores on the phase for the solver it builds
+#: (each over that solver's decision vector).
+_RESIDUAL_SOLVER_NODE_FUNCTIONS = (
+    "_node_alpha_function",
+    "_williams_tension_ground_function",
+)
+
 
 @dataclass
 class NodeControl:
@@ -3048,7 +3055,16 @@ class PhaseParameterized(TimeSeries):
         rigid_kite_model.reset_solver()
 
         # Temporarily swap; residual_solver and substitute_parametrized_kinematics
-        # both read self.kite_model.
+        # both read self.kite_model. residual_solver also stores the node
+        # functions of the solver it builds on self; the caller's Williams
+        # solver was built first, so they are saved and put back: the rigid
+        # ones take a shorter decision vector, and the Williams march calling
+        # them fails at its first node.
+        saved = {
+            name: self.__dict__[name]
+            for name in _RESIDUAL_SOLVER_NODE_FUNCTIONS
+            if name in self.__dict__
+        }
         self.kite_model = rigid_kite_model
         try:
             rigid_km = self.substitute_parametrized_kinematics(pattern)
@@ -3103,6 +3119,11 @@ class PhaseParameterized(TimeSeries):
             }
         finally:
             self.kite_model = original_kite_model
+            for name in _RESIDUAL_SOLVER_NODE_FUNCTIONS:
+                if name in saved:
+                    setattr(self, name, saved[name])
+                else:
+                    self.__dict__.pop(name, None)
 
     def integrator(self, time_step, kite_model=None):
         if kite_model is None:
