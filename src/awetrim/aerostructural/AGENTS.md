@@ -73,7 +73,19 @@ src/awetrim/aerostructural/
   tracking.py                      setup_tracking_arrays, update_tracking_arrays
   utils.py                         rotate_geometry, calculate_cg, calculate_inertia, load_yaml
   logging_config.py                Package-level logging setup
-  aerodynamic_vsm.py               VSM body initialisation and run_vsm_package wrapper (shared)
+  aerodynamic_vsm.py               VSM body initialisation and run_vsm_package wrapper (shared).
+                                   run_frozen_alpha_polar_about_trim: the alpha
+                                   polar of a TRIMMED body on its frozen shape
+                                   (freestream turned in the FRD centre-panel
+                                   axes at fixed |va| and side slip, rotational
+                                   inflow kept, attached-first, seeds marched
+                                   out from 0; its 0 step re-solves the trim to
+                                   ~1e-15). It must start from the body the trim
+                                   returned: the trim's inflow includes the
+                                   course frame's transport rate (v_tau / r =
+                                   0.07 rad/s at the window centre), and va alone
+                                   imposed on a rebuilt body is 3% off in force.
+                                   body_centre_panel_axes: FRD axes of a body
   aerodynamic_bridle_line_drag.py  Bridle line aerodynamic drag (shared)
                                    (the KCU's bluff-body drag is NOT here: it
                                     enters through the TRIM, see below; the
@@ -90,7 +102,9 @@ src/awetrim/aerostructural/
                                    adding a branch, not by copying the driver.
                                    Steers only when the caller passes
                                    steering_tape_indices (see "Steering in
-                                   the shared driver" below).
+                                   the shared driver" below). final_state={}
+                                   receives the FINAL trimmed VSM body and the
+                                   full trim result (what meta cannot store).
     aero2struc.py                  Aero-to-structural force mapping and moment
                                    preservation check. chordwise_distribution
                                    (see below) decides whether the panel's
@@ -128,6 +142,19 @@ src/awetrim/aerostructural/
                                    struc_geometry_FEM_full.yaml, flying the full
                                    geometry's aero mesh -- the public demo, so
                                    it and Billow differ only in the structure
+                                   solve_deformation = build_case (config,
+                                   files, VSM body, tether) + prepare_structure
+                                   (one live wireframe; PreparedWireframe reads
+                                   the LIVE tape lengths, pin_bridle_modulus
+                                   sets the fixed-stiffness model) + solve_step
+                                   (one coupled_solver_qsm solve from wherever
+                                   the structure stands; final_state= receives
+                                   the trimmed body, trim result and system
+                                   model). Refactor of 2026-10-27 is
+                                   bit-identical. Chains must not use the
+                                   elongation bound (it only raises k, so a
+                                   reused structure ratchets): pin the modulus
+                                   and set structural_pss.update_stiffness false
     reduce_fem.py                  reduce_fem_geometry: FEM_full -> PSM-format
                                    wireframe. One rib per strut, front/rear
                                    node = the bridle attachments (x/c 0.01 /
@@ -154,7 +181,17 @@ src/awetrim/aerostructural/
     __init__.py                    Re-exports the structural_billow API
     driver.py                      solve_deformation: one whole Billow case
                                    (was examples/2_aerostructural/
-                                   run_simulation_BILLOW.py until 2026-10-07)
+                                   run_simulation_BILLOW.py until 2026-10-07),
+                                   built from build_case (config, files, VSM
+                                   body, tether: once), prepare_structure (one
+                                   live Billow model + its load mapping and VSM
+                                   copies; PreparedStructure.power_tape_length /
+                                   steering_half_difference read the LIVE rest
+                                   lengths) and solve_step (one coupled solve
+                                   from wherever the structure stands: chains
+                                   warm-start, the identification sweep of
+                                   examples/3_rom_identification/ is one).
+                                   Refactor of 2026-10-27 is bit-identical
     structural_billow.py           Adapts the full Billow model (cables,
                                    pulleys, inflatable Timoshenko tube beams,
                                    wrinkling CST membrane canopy) to the same
@@ -176,19 +213,13 @@ examples/2_aerostructural/            The PUBLIC demonstrator: keep it to these
   plot_simulation.py               Trim table + kite_view.html (3-D viewer,
                                    kite_viewer_template.html) of one case
   common.py                        Re-export of aerostructural.case (old name)
-  studies/                         The Billow analyses docs/billow/ cites; they
-                                   import from each other, keep them together
-  studies/run_steering_BILLOW.py   Steered full-fidelity solve
-  studies/run_chain_depower_BILLOW.py  Depower continuation chain
-  studies/run_matched_sweep_BILLOW.py  Depower and steering chains at the depower
-                                   attributed from flight, one chain per target
-                                   apparent speed; resumable, rows saved as solved
-  studies/export_matched_sweep_data.py  Packs those rows into one JSON payload
-  studies/build_matched_sweep_page.py  Fills matched_sweep_page_template.html with
-                                   that payload + the paper's comparison.json +
-                                   matched_sweep_page_findings.json: ONE
-                                   self-contained HTML (no Claude dependency)
-  studies/plot_matched_sweep_BILLOW.py  Solved shapes and curves against flight
+examples/3_rom_identification/
+  run_identification_sweep.py      Depower and steering chains at the window
+                                   centre, either driver (build_case /
+                                   prepare_structure / solve_step) + a frozen
+                                   polar per state -> the identification dataset
+The Billow studies docs/billow/ cites (steering, depower chains, matched
+sweep and its page) are research scripts, available on request.
 ```
 
 Debugging-only checks (check_aero_symmetry, check_tip_stall,

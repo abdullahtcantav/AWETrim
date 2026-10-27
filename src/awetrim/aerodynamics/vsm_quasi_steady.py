@@ -1006,6 +1006,10 @@ def solve_vsm_quasi_steady_trim(
         "wind_vel_world": _as_3vector(kin.get("wind_velocity", np.zeros(3))),
         "kite_vel_world": _as_3vector(kin.get("kite_velocity", np.zeros(3))),
         "va_vel_world": _as_3vector(kin.get("apparent_velocity", va)),
+        # The transport rate the aero was evaluated at (rotational inflow
+        # about reference_point), as the CasADi trim reports it: with
+        # va_vel_world it reproduces the trim's inflow on a frozen body.
+        "omega_c_vsm": _as_3vector(kin["omega_c_vsm"]),
         "Umag": umag,
         "course_axis": axes.course,
         "radial_axis": axes.radial,
@@ -2040,6 +2044,7 @@ def solve_vsm_qs_trim_with_williams_tether(
             # acts on the (fixed) bridle node instead.
             "force_kcu": force_kcu,
             "va": va,
+            "omega_c_vsm": omega_c_vsm,
             "umag": umag,
             "res": res,
             "aoa_deg": aoa_deg,
@@ -2278,6 +2283,9 @@ def solve_vsm_qs_trim_with_williams_tether(
         "cd": payload["res"].get("cd"),
         "tether_force": float(tether_force),
         "va_vel_world": payload["va"],
+        # The rotational inflow of the trim, as solve_vsm_quasi_steady_trim
+        # reports it.
+        "omega_c_vsm": _as_3vector(payload["omega_c_vsm"]),
         "Umag": payload["umag"],
         "total_aero_force_vec": payload["total_aero_force"],
         "force_kite_resultant": F_kite_wind,

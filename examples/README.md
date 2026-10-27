@@ -8,9 +8,10 @@ example **from the project root**. They all use the TU Delft LEI-V3 kite in
 
 ```
  1 design ──► 2 aerostructural ──► 3 ROM identification ──► 4 trajectory optimisation
- data/<kite>/   deformed shapes,       rom_config_*.yaml          cycle_configs/,
- (your kite)    identification         (the reduced-order         optimised paths
-                dataset                 model)                         ▲
+ data/<kite>/   deformed shapes        sweep dataset,             cycle_configs/,
+ (your kite)                           rom_config_*.yaml          optimised paths
+                                       (the reduced-order              ▲
+                                        model)                         │
                                             ▲                          │
                                             │                     server/ (as a service)
                          5 flight data ─────┘
@@ -20,8 +21,8 @@ example **from the project root**. They all use the TU Delft LEI-V3 kite in
 | Step | Folder | What it does | Writes |
 |------|--------|--------------|--------|
 | 1 | [`1_design/`](1_design/) | Describe the kite in `data/<kite>/`, solve one quasi-steady VSM trim and check its static stability | `results/aerodynamics/` |
-| 2 | [`2_aerostructural/`](2_aerostructural/) | Couple VSM and the Billow structure to the deformed shape the kite flies in, at wireframe or full fidelity; sweep the operating range for step 3 | `results/<kite>/aerostructural/` |
-| 3 | [`3_rom_identification/`](3_rom_identification/) | Identify the reduced-order model (ROM) from the step-2 sweep: lift, drag, bridle pitch and roll gain | `data/<kite>/rom_config_aerostructural.yaml` |
+| 2 | [`2_aerostructural/`](2_aerostructural/) | Couple VSM and the Billow structure to the deformed shape the kite flies in, at wireframe or full fidelity | `results/<kite>/aerostructural/` |
+| 3 | [`3_rom_identification/`](3_rom_identification/) | Sweep the operating range with the coupled model of step 2 (depower and steering chains, frozen-shape polars), then identify the reduced-order model (ROM) from it: lift, drag, bridle pitch and roll gain | `results/<kite>/identification/` (dataset and `rom_config_aerostructural.yaml`) |
 | 4 | [`4_trajectory_optimization/`](4_trajectory_optimization/) | Simulate and optimise reel-out patterns and whole pumping cycles with the ROM | `data/<kite>/cycle_configs/`, `results/<kite>/optimization/` |
 | 5 | [`5_flight_data/`](5_flight_data/) | Optional, with flight data: correct the ROM's depower pitch and drag on a flight, and validate it against the measurements | `data/<kite>/rom_config_aerostructural_flight_corrected.yaml` |
 | | [`server/`](server/) | Step 4 as a REST service, with Python, Julia and MATLAB clients | |
@@ -49,7 +50,8 @@ output file. EKF-AWE ships the raw LEI-V3 flight logs; run it on the
 
 - Everything about a kite comes from the YAML files in `data/<kite>/`
   (`system.yaml`, `aero_geometry.yaml`, `struc_geometry_FEM_full.yaml`,
-  `as_config.yaml`, the ROM files, `cycle_profile.yaml`, `cycle_configs/`).
+  `as_config.yaml`, `identification.yaml`, the ROM files, `cycle_profile.yaml`,
+  `cycle_configs/`).
   `system.yaml` selects which ROM file the trajectory steps use.
 - Results go to `results/<kite>/<analysis>/` (step 1: `results/aerodynamics/<script>/`,
   override with `--output-dir`).

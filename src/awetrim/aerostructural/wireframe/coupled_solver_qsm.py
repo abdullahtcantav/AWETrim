@@ -208,6 +208,7 @@ def main(
     power_tape_index=None,
     ### STRUC
     psystem=None,
+    final_state=None,
 ):
     """
     Runs the aero-structural solver for the given input parameters.
@@ -216,6 +217,9 @@ def main(
         config (dict): Main configuration dictionary.
         PROJECT_DIR (Path): Path to the project directory.
         results_dir (Path): Path to the results directory.
+        final_state (dict or None): When given, filled with the FINAL trim's
+            ``body_aero`` (trimmed attitude, trim inflow set) and
+            ``results_aero``, as in ``coupled.coupled_solver.main``.
 
     Returns:
         tracking_data (dict): Dictionary containing time histories of positions, forces, etc.
@@ -2362,6 +2366,9 @@ def main(
                 n_ever_stalled,
                 tracking_data["stall_mask"].shape[1],
             )
+
+    if final_state is not None:
+        final_state.update(body_aero=body_aero, results_aero=results_aero)
 
     return tracking_data, meta
 

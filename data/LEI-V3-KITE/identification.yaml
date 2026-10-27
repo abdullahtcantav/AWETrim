@@ -1,0 +1,121 @@
+# Inputs of the ROM identification, workflow step 3
+# (examples/3_rom_identification/, see its README).
+#
+# sweep: the coupled aerostructural states run_identification_sweep.py solves
+#        at the centre of the wind window, gravity off: continuation chains in
+#        depower and in steering, each converged state with a frozen-shape
+#        angle-of-attack polar about it.
+# fit:   the kite constants identify_rom_aerostructural.py fits the ROM with.
+#
+# Both blocks hold the settings common to every structural fidelity plus a
+# `fidelities:` block whose entry for the chosen fidelity is merged over them
+# (nested dicts key by key). `fidelity` picks the default; both scripts take
+# --fidelity to override it, and write under
+# results/<kite>/identification/<fidelity>/.
+#   billow     Billow's FULL model: inflatable tube beams, wrinkling membrane
+#              canopy and the bridle (struc_geometry_FEM_full.yaml).
+#   wireframe  Billow's line system on the PSM wireframe geometry: the model
+#              the shipped rom_config_aerostructural.yaml was identified on.
+
+fidelity: billow
+
+sweep:
+  system_file: system.yaml      # in this folder: the masses (KCU) and the tether
+  # Merged over as_config.yaml for every solve: the flight state (course-frame
+  # angles [deg], tether length [m], reel speed [m/s]) and gravity.
+  config_overrides:
+    angle_elevation_deg: 0.0
+    angle_azimuth_deg: 0.0
+    angle_course_deg: 90.0
+    distance_radial: 300.0
+    speed_radial: 0.0
+    is_with_gravity: false
+  # Wind at the reference height of the kite's wind model [m/s], one set of
+  # chains per value. Without reel-out the kite flies at about 5 x the wind,
+  # v_a 20 and 25 m/s: inside the flown band.
+  wind_speeds: [4.0, 5.0]
+  # Depower chains: from the tape length the geometry is built at, the power
+  # tape walks to each target rest length l_dp [m] in steps of `step`.
+  # Steering chains: at each power-tape length the tape is walked to first,
+  # then the steering half-difference [m] grows to `max` in steps of `step`.
+  steering:
+    max: 0.10
+    step: 0.025
+  # A chain stops at the first state that does not converge or whose stalled
+  # span fraction exceeds this.
+  max_stalled_fraction: 0.2
+  # Frozen-shape polar about every state: [min, max, step] increments [deg].
+  polar_d_alpha_deg: [-6.0, 14.0, 1.0]
+
+  fidelities:
+    billow:
+      # The step-2 aerodynamics: 27 sections x 2 = 54 panels, VSM's base
+      # circulation loop (with artificial viscosity the stalled tips trap the
+      # Anderson loop). The canopy needs a tether force well above ~2000 N to
+      # keep its symmetric equilibrium (aerostructural/AGENTS.md).
+      config_overrides:
+        aerodynamic:
+          n_aero_panels_per_struc_section: 2
+          gamma_loop_type: base
+      # Built at 1.90 m. The full model flies the flown reel-out loads at a
+      # longer tape than the flight's 1.7 m, so the range reaches 2.6 m.
+      depower:
+        targets: [1.75, 2.60]
+        step: 0.05
+      steering:
+        power_tape_lengths: [2.10, 2.40]
+    wireframe:
+      struc_geometry: struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml
+      system_file: system_flown_2019.yaml   # the hardware the shipped ROM used
+      # The fixed-stiffness model: every bridle line, tapes included, at this
+      # multiple of its file modulus (Dyneema tape is as stiff as the round
+      # lines), the wing at its own, and no elongation-bound stiffening: one
+      # kite for the whole sweep, whatever order the states are solved in.
+      bridle_modulus_factor: 9.0
+      # The wireframe flies at about 3.8 x the wind: 6 m/s reaches v_a 23.
+      wind_speeds: [4.0, 5.0, 6.0]
+      config_overrides:
+        aerodynamic:
+          n_aero_panels_per_struc_section: 5   # 9 sections x 5 = 45 panels
+        structural_pss:
+          update_stiffness: false
+      # Built at 1.50 m; the shipped campaign spanned 1.33-2.28 m.
+      depower:
+        targets: [1.35, 2.25]
+        step: 0.05
+      # Near the 2019 reel-out and reel-in tapes.
+      steering:
+        power_tape_lengths: [1.70, 2.10]
+
+fit:
+  # The area the ROM's coefficients are normalised by [m2]: the EKF / flight
+  # area, which the flight-corrected ROM keeps (system.yaml's 17.21 m2 is the
+  # projected geometry).
+  reference_area: 19.75
+  # Steering-tape half-difference per unit of the ROM's u_s [m]
+  # (awetrim.identification.controls: the standardised flight scale).
+  steering_tape_per_unit_us: 1.4
+  # Written to the ROM file as its `tether` block.
+  rom_tether:
+    model: williams
+    n_elements: 10
+    wind_model: uniform
+    cf: 0.01
+    is_elastic: false
+  fidelities:
+    # The u_p = l_dp range the coefficients are fitted on [m], and the ROM's
+    # `controls` block: the tape lengths of the powered and depowered phases,
+    # the band the trajectory optimiser works in. The tape coordinate is the
+    # model's own, so it differs between fidelities.
+    billow:
+      depower_band: [1.6, 2.2]
+      controls:
+        input_depower:
+          powered: 1.7
+          depowered: 2.1
+    wireframe:
+      depower_band: [1.6, 2.2]
+      controls:
+        input_depower:
+          powered: 1.7
+          depowered: 2.1

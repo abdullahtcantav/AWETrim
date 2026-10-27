@@ -144,8 +144,13 @@ src/awetrim/
   utils/             ✅  fitting, defaults, reference frames, control_metrics
                          (steering-reversal count / pairs outside a deadband,
                          seam pair counted on a periodic history)
-  identification/    🟡  ROM aero-coefficient identification: tidy dataset
-                         (aero_dataset.py, AS + EKF sources, shared schema),
+  identification/    🟡  ROM aero-coefficient identification: the
+                         aerostructural sweep dataset (aerostructural_dataset.py:
+                         trims.csv / polars.csv of run_identification_sweep.py,
+                         dimensional, vectors as _x/_y/_z in the trim frame;
+                         coefficient_tables -> CL/CD samples and the
+                         theta_b / phi_a trim samples of paper App. D), tidy
+                         dataset (aero_dataset.py, AS + EKF sources, shared schema),
                          BIC forward-stepwise polynomial fit with k-fold CV
                          (aero_polynomial.py → rom_config "coeffs"), control
                          conventions (controls.py), rigid_body_axes.py
@@ -160,8 +165,12 @@ ROM is **script-based**, not a `src/` module: see `examples/4_trajectory_optimiz
 `system.yaml` selects (`models.reduced_order.aerodynamics`, resolved by
 `system.factory.resolve_rom_config_path`; fallback a sibling `rom_config.yaml`).
 The LEI-V3 has two: `rom_config_aerostructural.yaml` (identified from the coupled
-Billow-wireframe centre-window simulations only, by
-`examples/3_rom_identification/identify_rom_aerostructural.py`) and
+Billow-wireframe centre-window simulations only, on the private _billow9
+campaign; the public step 3 does the same on continuation chains of either
+fidelity (`fidelity: billow | wireframe`):
+`examples/3_rom_identification/run_identification_sweep.py` then
+`identify_rom_aerostructural.py`, both reading `data/<kite>/identification.yaml`,
+writing under `results/<kite>/identification/<fidelity>/`) and
 `rom_config_aerostructural_flight_corrected.yaml` (the DEFAULT in every
 LEI-V3 system file: the aerostructural one with
 theta_b and a single-input dC_D(u_p, u_s^2) fitted to 2019 flight, cycles 60-67
@@ -376,6 +385,7 @@ Each kite under `data/<kite_name>/` should include at minimum the following file
 - `aero_geometry.yaml` — VSM aerodynamic geometry describing wing sections, paneling, and references to airfoil polars; may reference a subfolder with airfoil `.dat` or polar CSVs.
 - `as_config.yaml` (or `aerostructural_configs/config.yaml`) — aerostructural solver settings (time-step, tolerances, actuation options, initialisation flags).
 - `rom_config*.yaml` — reduced-order aerodynamic coefficient definitions (one file per ROM; `system.yaml` `models.reduced_order.aerodynamics` names the one in use, else a sibling `rom_config.yaml` is used) (plus ROM tether settings) used by ROM or identification flows. A `controls.input_depower: {powered, depowered}` block states the depower band the ROM was identified on, in the ROM's own `u_p` unit (`identification.controls.rom_depower_band`; absent = the V3 power-tape metres 1.7/2.1, but the full-cycle scripts require it). An optional `validity.angle_of_attack_deg: [lo, hi]` states the AoA range the ROM was identified on (the full-cycle optimizer's AoA bound).
+- `identification.yaml` — inputs of the ROM identification (step 3): a default `fidelity` (`billow` | `wireframe`); in each block, common keys plus a `fidelities:` entry per fidelity merged over them (`identification.aerostructural_dataset.identification_settings`). `sweep:` (system file, structural geometry, wireframe `bridle_modulus_factor`, as_config overrides with the centre-window flight state, wind speeds, depower targets and step, steering chains, stall stop, polar increments) for `run_identification_sweep.py`, and `fit:` (ROM `reference_area`, `steering_tape_per_unit_us`, fitted `depower_band`, the ROM's `controls` and `rom_tether` blocks) for `identify_rom_aerostructural.py`. Nothing kite-specific is hard-coded in those scripts.
 - `system_flown_<date>.yaml` — the as-flown hardware of each flight. AWETrim maintains these; EKF-AWE reads them (`load_config(..., system_file=...)`), its own EKF configuration (`ekf_config.yaml`) lives in EKF-AWE.
 
 Optional but recommended:
@@ -386,6 +396,7 @@ Optional but recommended:
 
 Results layout (convention):
 
+- `results/<kite_name>/identification/<fidelity>/sweep/` — the step-3 dataset (`trims.csv`, `polars.csv`, `<chain>/step_<n>/sim_output.h5`); `identification/rom_aerostructural/` — the ROM it gives.
 - `results/<kite_name>/<analysis_type>/sim_output.h5` — aerostructural coupled-solver outputs.
 - `results/<kite_name>/ekf/` — EKF outputs and diagnostics.
 
