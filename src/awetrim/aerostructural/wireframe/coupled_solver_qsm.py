@@ -239,7 +239,10 @@ def main(
     # current == target at iteration 0 and no walk happens; with a different
     # final target only the difference is walked. The ramp remains the right
     # tool for COLD solves (it doubles as the load continuation) -- preset
-    # only from a deformed snapshot equilibrated at these lengths.
+    # only from a deformed snapshot equilibrated at these lengths. Snapshots
+    # written since 2026-10-27 DO store their actuation (per-connection
+    # bridle_connection_rest_lengths): starting from one of those, the
+    # geometry already carries the steering and a preset would add it twice.
     steering_preset = config.get("steering_tape_preset_extension")
     if (
         steering_preset is not None

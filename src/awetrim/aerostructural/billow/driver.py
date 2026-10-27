@@ -284,7 +284,14 @@ def solve_deformation(
     final_nodes = np.asarray(tracking_data["positions"][last])
     save_geometry_snapshot(
         config,
-        build_deformed_struc_geometry(struc_geometry, final_nodes),
+        build_deformed_struc_geometry(
+            struc_geometry,
+            final_nodes,
+            # the live tapes, not the input file's: the actuation ran after it
+            bridle_rest_lengths=structural_billow.get_rest_lengths(
+                billow_structure, kite_connectivity_arr
+            )[-len(bridle_connectivity_arr):],
+        ),
         build_deformed_aero_geometry(
             aero_geometry, final_nodes, struc_node_le_indices, struc_node_te_indices
         ),
