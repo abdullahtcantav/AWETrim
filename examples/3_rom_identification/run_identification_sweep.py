@@ -25,8 +25,11 @@ awetrim.identification.aerostructural_dataset):
     polars.csv    one row per polar sample
     <chain>/step_<n>/sim_output.h5   the coupled solve of each anchor
 
-Resumable: a finished chain is skipped; an unfinished one is solved again
-from its start (its rows are replaced). About a minute per anchor.
+Resumable: a finished chain is skipped. An unfinished wireframe chain goes
+on after its last complete anchor, from the structure that anchor's
+sim_output.h5 saved; an unfinished Billow chain is solved again from its
+start (its beam frames are not saved). A state that does not converge ends
+its chain. About a minute per anchor.
 
 Usage (project root):
     python examples/3_rom_identification/run_identification_sweep.py
@@ -128,17 +131,21 @@ def prepare(driver, case, spec: dict, config: dict):
     return prepared
 
 
-def solve_chain(driver, case, chain: Chain, spec: dict, out: Path) -> int:
-    """Solve one chain, appending its anchors to the sweep files. Returns the
-    number of anchors written."""
+def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 0) -> int:
+    """Solve one chain from step ``start``, appending its anchors to the
+    sweep files. A chain resumed past its first step starts from the
+    structure saved with step ``start - 1``. Returns the chain's number of
+    anchors."""
     config = copy.deepcopy(case.config)
     config["wind_speed_wind_ref"] = float(chain.wind_speed)
     prepared = prepare(driver, case, spec, config)
+    if start:
+        prepared.restore(out / chain.name / f"step_{start - 1:02d}" / "sim_output.h5")
     lo, hi, inc = spec["polar_d_alpha_deg"]
     d_alpha = np.round(np.arange(lo, hi + 0.5 * inc, inc), 9)
     m_arr = np.asarray(prepared.m_arr, dtype=float)
-    n_written = 0
-    for index, step in enumerate(chain.steps):
+    n_written = start
+    for index, step in enumerate(chain.steps[start:], start=start):
         started = time.perf_counter()
         # The depower walk comes first and the steering after it, both from
         # the structure's current state (coupled_solver.main's order).
@@ -159,6 +166,17 @@ def solve_chain(driver, case, chain: Chain, spec: dict, out: Path) -> int:
         save_sim_output(tracking, meta, step_dir)
 
         trim, body = final_state["results_aero"], final_state["body_aero"]
+        # An unconverged state ends the chain before its polar: the fit drops
+        # it anyway, and a diverged (NaN) shape has no polar to take.
+        if not meta["converged"] or not np.all(
+            np.isfinite(np.asarray(trim["total_aero_force_vec"], dtype=float))
+        ):
+            print(
+                f"  {chain.name}/{index:02d}: NOT CONVERGED, chain stopped "
+                f"| {(time.perf_counter() - started) / 60:.1f} min",
+                flush=True,
+            )
+            break
         polar = aerodynamic_vsm.run_frozen_alpha_polar_about_trim(
             body, prepared.vsm_solver, d_alpha
         )
@@ -188,23 +206,50 @@ def solve_chain(driver, case, chain: Chain, spec: dict, out: Path) -> int:
             f" | {(time.perf_counter() - started) / 60:.1f} min",
             flush=True,
         )
-        if not meta["converged"] or stalled > spec["max_stalled_fraction"]:
-            print(f"  {chain.name}: stopped (not converged or stalled)", flush=True)
+        if stalled > spec["max_stalled_fraction"]:
+            print(f"  {chain.name}: stopped (stalled)", flush=True)
             break
     (out / chain.name).mkdir(parents=True, exist_ok=True)
     (out / chain.name / DONE_MARKER).write_text(f"{n_written} anchors\n", encoding="utf-8")
     return n_written
 
 
-def _drop_chain_rows(out: Path, chain_name: str) -> None:
-    """Remove an unfinished chain's rows, so its rerun replaces them."""
+def _read_rows(path: Path) -> pd.DataFrame | None:
+    if not path.exists():
+        return None
+    return pd.read_csv(path, keep_default_na=False, na_values=["nan", "NaN"])
+
+
+def _step_of(anchors: pd.Series) -> pd.Series:
+    return anchors.str.rsplit("/", n=1).str[-1].astype(int)
+
+
+def resume_point(out: Path, chain_name: str) -> int:
+    """The steps of an unfinished chain already complete -- trim row and
+    polar rows written -- in an unbroken run from step 0."""
+    trims, polars = _read_rows(out / ds.TRIMS_FILE), _read_rows(out / ds.POLARS_FILE)
+    if trims is None or polars is None:
+        return 0
+    prefix = chain_name + "/"
+    with_trim = set(_step_of(trims.anchor[trims.anchor.str.startswith(prefix)]))
+    with_polar = set(_step_of(polars.anchor[polars.anchor.str.startswith(prefix)]))
+    n = 0
+    while n in with_trim and n in with_polar:
+        n += 1
+    return n
+
+
+def _drop_chain_rows(out: Path, chain_name: str, keep_steps: int = 0) -> None:
+    """Remove an unfinished chain's rows from step ``keep_steps`` on, so its
+    rerun replaces them."""
     for name in (ds.TRIMS_FILE, ds.POLARS_FILE):
         path = out / name
-        if path.exists():
-            table = pd.read_csv(path, keep_default_na=False, na_values=["nan", "NaN"])
-            keep = ~table["anchor"].str.startswith(chain_name + "/")
-            if not keep.all():
-                table[keep].to_csv(path, index=False)
+        table = _read_rows(path)
+        if table is not None:
+            ours = table["anchor"].str.startswith(chain_name + "/")
+            drop = ours & (_step_of(table["anchor"].where(ours, "x/0")) >= keep_steps)
+            if drop.any():
+                table[~drop].to_csv(path, index=False)
 
 
 def main() -> None:
@@ -239,9 +284,13 @@ def main() -> None:
         if (out / chain.name / DONE_MARKER).exists():
             print(f"{chain.name}: done, skipped", flush=True)
             continue
-        _drop_chain_rows(out, chain.name)
-        print(f"{chain.name}: {len(chain.steps)} states", flush=True)
-        solve_chain(driver, case, chain, spec, out)
+        # The wireframe resumes after its last complete anchor; Billow's
+        # beam frames are not in sim_output.h5, so its chain starts over.
+        start = resume_point(out, chain.name) if fidelity == "wireframe" else 0
+        _drop_chain_rows(out, chain.name, keep_steps=start)
+        resumed = f", resumed at step {start}" if start else ""
+        print(f"{chain.name}: {len(chain.steps)} states{resumed}", flush=True)
+        solve_chain(driver, case, chain, spec, out, start=start)
 
 
 if __name__ == "__main__":
