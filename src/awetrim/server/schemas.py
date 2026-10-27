@@ -490,6 +490,14 @@ class InitRequest(BaseModel):
         "defaults to the value in the kite's cycle config",
     )
     system_config_path: Optional[str] = None
+    rom_config_path: Optional[str] = Field(
+        default=None,
+        description="Reduced-order aerodynamic model to fly instead of the one "
+        "the system file names (models.reduced_order.aerodynamics); a relative "
+        "path is taken against the system file's folder, so "
+        "'rom_config_aerostructural.yaml' selects the LEI-V3 simulation-only "
+        "ROM. The init reply echoes the file in use.",
+    )
     cycle_config_path: Optional[str] = None
     optimization_params: List[str] = Field(
         default_factory=lambda: ["C_phi", "C_beta", "input_depower"]
@@ -642,6 +650,10 @@ class InitReply(BaseModel):
     reg_weight: Optional[float] = None
     detect_simple_bounds: Optional[bool] = None
     depower: Optional[DepowerReply] = None
+    rom_config: Optional[str] = Field(
+        default=None,
+        description="File name of the reduced-order aerodynamic model in use",
+    )
     min_turn_radius: Optional[float] = Field(
         default=None,
         description="Minimum turn radius [m] the optimizer will enforce "

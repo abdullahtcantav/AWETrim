@@ -82,9 +82,11 @@ CHAIN_GLOBS = (
 S_REF = 19.75
 #: Steering-tape half-difference per unit u_s [m] (controls.py standard).
 STEERING_GAIN_M = 1.4
-#: Operating depower band the ROM is fitted on [m] (flight 1.7 / 2.1 plus
-#: margin for the optimizer's excursions).
-UP_BAND = (1.6, 2.2)
+#: Depower band the ROM is fitted on [m]: the coupled chains' range, down to
+#: 1.33 m so the optimizer can explore tapes shorter than the flown 1.7 m (it
+#: was 1.6-2.2 until 2026-10; the band is written to validity.input_depower and
+#: enforced as the optimizer's depower box).
+UP_BAND = (1.3, 2.2)
 #: A polar is kept only if, at the coupled trim's alpha, its C_L is within
 #: this fraction of the coupled trim's: the frozen-shape re-trim must land on
 #: the coupled state. Steered snapshots beyond u_s tape ~0.1 m re-trim to a

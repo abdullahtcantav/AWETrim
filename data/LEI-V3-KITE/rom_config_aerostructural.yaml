@@ -4,11 +4,11 @@
 metadata:
   description: 'AEROSTRUCTURAL ROM of the LEI-V3 kite: every parameter identified
     from coupled VSM + Billow-wireframe solutions at the centre of the wind window
-    (gravity off), no flight data. Counterpart of rom_config_semi_empirical.yaml.'
+    (gravity off), no flight data. Basis of rom_config_aerostructural_flight_corrected.yaml.'
   identified_by: scripts/identification/identify_rom_aerostructural.py
-  identified_on: '2026-10-06'
-  source: '_billow9 centre-window continuation chains (2019 hardware): 243 anchors:
-    their coupled trims plus 4639 frozen-shape polar samples where the re-trim reproduces
+  identified_on: '2026-10-26'
+  source: '_billow9 centre-window continuation chains (2019 hardware): 285 anchors:
+    their coupled trims plus 5839 frozen-shape polar samples where the re-trim reproduces
     the coupled state; VSM main @ 8825a12, AV on, 45 panels'
   control_convention: u_p is the power-tape length l_dp [m]; u_s is the steering-tape
     half-difference / 1.4 m (awetrim.identification.controls, the standardised flight
@@ -18,9 +18,9 @@ metadata:
     KCU length/diameter/turbine through awetrim.aerodynamics.kcu_drag, at the bridle
     point. The tether drag is the ROM tether model''s.'
   fit_quality:
-    CL_cv_rmse: 0.020225275935543276
-    CD_cv_rmse: 0.0046245983168223745
-    theta_b_rms_deg: 0.24109190299511776
+    CL_cv_rmse: 0.01998105807163531
+    CD_cv_rmse: 0.004445243363749851
+    theta_b_rms_deg: 0.319482850521784
     roll_rms_deg: 0.3170823359111878
 controls:
   input_depower:
@@ -29,9 +29,9 @@ controls:
 validity:
   angle_of_attack_deg:
   - -6.0
-  - 27.0
+  - 30.0
   input_depower:
-  - 1.6284
+  - 1.3285
   - 2.1786
   input_steering_abs_max: 0.17857142857142858
 aerodynamics:
@@ -39,10 +39,10 @@ aerodynamics:
   reference_area: 19.75
   kcu_drag_in_coefficients: false
   params:
-    CL0: 0.38381003421923976
-    CD0: 0.0817999189393223
-    angle_pitch_tether_0: -0.344600863331424
-    slope_angle_pitch_tether_depower: 0.2576310059989331
+    CL0: 0.42457485302070264
+    CD0: 0.07468213748049157
+    angle_pitch_tether_0: -0.3647011742793269
+    slope_angle_pitch_tether_depower: 0.2679579765551969
     gain_roll_steering: -0.5296949136508295
     angle_of_attack_stall: 0.29670597283903605
     width_stall: 0.026179938779914945
@@ -51,72 +51,70 @@ aerodynamics:
     - vars:
         alpha: 1
         u_p: 1
-      coef: -0.6250419816620133
-    - vars:
-        stall: 1
-        alpha: 2
-      coef: 5.406091044402834
-    - var: alpha
-      power: 1
-      coef: 5.459469311577711
-    - var: alpha
-      power: 2
-      coef: -6.897741224754888
-    - vars:
-        stall: 1
-        alpha: 1
-      coef: -6.060888366681757
-    - vars:
-        alpha: 1
-        u_s: 2
-      coef: -39.743003984467265
-    - vars:
-        stall: 1
-        u_s: 2
-      coef: 14.199177608212077
-    - var: u_p
-      power: 1
-      coef: -0.045953608432480246
-    - var: v_a
-      power: 1
-      coef: 0.000995578217854922
-    - var: stall
-      power: 1
-      coef: 0.957915894977806
+      coef: -0.4413674374912827
     - vars:
         alpha: 2
         u_p: 1
-      coef: 1.8195310102341413
+      coef: 1.3759746447882137
+    - var: alpha
+      power: 1
+      coef: 5.092776535162903
+    - vars:
+        stall: 1
+        alpha: 2
+      coef: 6.883638758102936
+    - vars:
+        stall: 1
+        alpha: 1
+      coef: -7.11679105147631
+    - var: u_p
+      power: 1
+      coef: -0.06468419167171285
+    - var: u_s
+      power: 2
+      coef: -2.5919235307994706
+    - var: alpha
+      power: 2
+      coef: -6.123285581577286
+    - var: stall
+      power: 1
+      coef: 1.1580018601235806
+    - vars:
+        u_p: 1
+        v_a: 1
+      coef: 0.00045164739073280685
     CD:
     - var: alpha
       power: 2
-      coef: 1.2765680934893373
+      coef: 1.2237613886308705
     - var: alpha
       power: 1
-      coef: 0.11909474423249186
+      coef: 0.28461516429055955
+    - var: stall
+      power: 1
+      coef: -0.08312367243101182
+    - vars:
+        alpha: 1
+        u_p: 1
+      coef: -0.08032131966015246
     - vars:
         stall: 1
         alpha: 2
-      coef: -0.8710760977473756
+      coef: -1.1226197326207887
     - vars:
         stall: 1
-        u_p: 1
-      coef: -0.022164058558772497
+        alpha: 1
+      coef: 0.6726516577284335
     - vars:
         alpha: 1
         v_a: 1
-      coef: 0.001259185811469154
-    - vars:
-        stall: 1
-        alpha: 1
-      coef: 0.45545599838963857
+      coef: 0.0011219903817289247
+    - var: u_p
+      power: 2
+      coef: 0.0019539388522359885
     - var: u_s
       power: 2
-      coef: -0.525471843981387
-    - vars:
-        alpha: 1
-        u_s: 2
-      coef: 2.4743646185322645
+      coef: -0.2938467817480895
 tether:
   model: williams
   n_elements: 10
