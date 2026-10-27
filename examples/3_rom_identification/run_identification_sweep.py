@@ -25,7 +25,8 @@ awetrim.identification.aerostructural_dataset):
     polars.csv    one row per polar sample
     <chain>/step_<n>/sim_output.h5   the coupled solve of each anchor
 
-Resumable: a finished chain is skipped. An unfinished wireframe chain goes
+Parallel: runs on disjoint --chains may share the output folder (the sweep
+files are written under a lock). Resumable: a finished chain is skipped. An unfinished wireframe chain goes
 on after its last complete anchor, from the structure that anchor's
 sim_output.h5 saved; an unfinished Billow chain is solved again from its
 start (its beam frames are not saved). A state that does not converge ends
@@ -35,6 +36,7 @@ Usage (project root):
     python examples/3_rom_identification/run_identification_sweep.py
     python examples/3_rom_identification/run_identification_sweep.py --fidelity wireframe
     python examples/3_rom_identification/run_identification_sweep.py --chains w4.0_depower_2.60
+    python examples/3_rom_identification/run_identification_sweep.py --chains w5.0_depower_1.35 w5.0_depower_2.60
     python examples/3_rom_identification/run_identification_sweep.py --list
 """
 
@@ -42,7 +44,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +62,33 @@ from awetrim.identification import aerostructural_dataset as ds
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DONE_MARKER = "chain_done"
+LOCK_FILE = ".sweep_files.lock"
+LOCK_STALE_S = 120.0  # a lock this old was left by a killed run
+
+
+@contextmanager
+def sweep_files_lock(out: Path):
+    """Write the shared sweep files one run at a time: runs on disjoint
+    --chains may share ``out``, and a resume rewrites whole files."""
+    out.mkdir(parents=True, exist_ok=True)
+    lock = out / LOCK_FILE
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > LOCK_STALE_S:
+                    lock.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        os.close(fd)
+        lock.unlink()
 
 
 @dataclass
@@ -183,7 +214,7 @@ def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 
         f_trim = np.asarray(trim["total_aero_force_vec"], dtype=float)
         f_zero = next(s["force_world"] for s in polar if s["d_alpha_deg"] == 0.0)
         anchor = f"{chain.name}/{index:02d}"
-        ds.append_rows(out / ds.TRIMS_FILE, [ds.trim_row(
+        trim_row = ds.trim_row(
             anchor=anchor, chain=chain.name, step=index,
             wind_speed=chain.wind_speed,
             power_tape_length=prepared.power_tape_length,
@@ -192,8 +223,10 @@ def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 
             mass_total=float(m_arr.sum()), trim=trim, meta=meta,
             body_z=aerodynamic_vsm.body_centre_panel_axes(body)[2],
             polar_check=float(np.linalg.norm(f_zero - f_trim) / np.linalg.norm(f_trim)),
-        )])
-        ds.append_rows(out / ds.POLARS_FILE, ds.polar_rows(anchor, polar))
+        )
+        with sweep_files_lock(out):
+            ds.append_rows(out / ds.TRIMS_FILE, [trim_row])
+            ds.append_rows(out / ds.POLARS_FILE, ds.polar_rows(anchor, polar))
         n_written += 1
 
         stalled = float(trim.get("stalled_fraction", 0.0) or 0.0)
@@ -286,8 +319,9 @@ def main() -> None:
             continue
         # The wireframe resumes after its last complete anchor; Billow's
         # beam frames are not in sim_output.h5, so its chain starts over.
-        start = resume_point(out, chain.name) if fidelity == "wireframe" else 0
-        _drop_chain_rows(out, chain.name, keep_steps=start)
+        with sweep_files_lock(out):
+            start = resume_point(out, chain.name) if fidelity == "wireframe" else 0
+            _drop_chain_rows(out, chain.name, keep_steps=start)
         resumed = f", resumed at step {start}" if start else ""
         print(f"{chain.name}: {len(chain.steps)} states{resumed}", flush=True)
         solve_chain(driver, case, chain, spec, out, start=start)
