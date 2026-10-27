@@ -102,17 +102,23 @@ fit:
     wind_model: uniform
     cf: 0.01
     is_elastic: false
+  # The u_p = l_dp range the coefficients are fitted on [m], and the ROM's
+  # `controls` block: the tape lengths of the powered and depowered phases,
+  # the band the trajectory optimiser works in. These are modelling choices
+  # for whoever identifies the kite. The tape coordinate is the model's own, so
+  # each fidelity sets its own; the values below are the current LEI-V3
+  # estimates.
   fidelities:
-    # The u_p = l_dp range the coefficients are fitted on [m], and the ROM's
-    # `controls` block: the tape lengths of the powered and depowered phases,
-    # the band the trajectory optimiser works in. The tape coordinate is the
-    # model's own, so it differs between fidelities.
+    # The full model reaches the flown reel-out tether force at about 2.1 m
+    # and the reel-in at about 2.5 m: a longer tape than the flight's
+    # 1.7 / 2.1 m, because its trim flies a higher angle of attack.
     billow:
-      depower_band: [1.6, 2.2]
+      depower_band: [2.0, 2.6]
       controls:
         input_depower:
-          powered: 1.7
-          depowered: 2.1
+          powered: 2.1
+          depowered: 2.5
+    # The shipped ROM's band, on which the wireframe matches the flight.
     wireframe:
       depower_band: [1.6, 2.2]
       controls:

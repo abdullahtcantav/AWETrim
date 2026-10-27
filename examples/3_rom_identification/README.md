@@ -22,7 +22,10 @@ file, or `--fidelity` on both scripts):
 
 Each fidelity has its own block in the file (geometry, tape range, fit band),
 because the tape coordinate is the model's own: the full model flies a given
-tape length at a higher angle of attack than the wireframe.
+tape length at a higher angle of attack than the wireframe. The tape ranges
+and the fit band are modelling choices: for a new kite, set them where its
+model flies the loads of interest (the LEI-V3 values are the current
+estimates, commented in the file).
 
 | Script | What it does | Writes |
 |--------|--------------|--------|
