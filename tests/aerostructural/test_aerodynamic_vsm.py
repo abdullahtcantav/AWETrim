@@ -146,3 +146,48 @@ def test_trim_just_inside_a_bound_counts_as_pinned():
     pinned = aerodynamic_vsm._warn_if_trim_on_bounds([20.0, 0.0, 0.0, 3.9987, 0.0], lo, hi)
     assert [(name, which) for name, _value, which in pinned] == [("yaw", "upper")]
     assert aerodynamic_vsm._warn_if_trim_on_bounds([20.0, 0.0, 0.0, 3.0, 0.0], lo, hi) == []
+
+
+# --- the cold trim seed -------------------------------------------------------
+class _StubKite:
+    """Apparent wind of a kite at tangential speed v in a 3 m/s radial wind,
+    course frame: what the seed reads off the system model."""
+
+    speed_tangential = 0.0
+
+    @property
+    def velocity_apparent_wind(self):
+        return np.array([-self.speed_tangential, 0.0, 3.0])
+
+
+def _one_chord_body(te_rise):
+    """A wing of three identical panels, chord 1 m along +x, its trailing
+    edge ``te_rise`` m above the leading edge (VSM frame: nose down)."""
+    from types import SimpleNamespace
+
+    le, te = np.zeros(3), np.array([1.0, 0.0, te_rise])
+    panel = SimpleNamespace(LE_point_1=le, LE_point_2=le, TE_point_1=te, TE_point_2=te)
+    return SimpleNamespace(panels=[panel] * 3)
+
+
+def test_mid_span_chord_angle_of_attack_is_signed_nose_up_positive():
+    body = _one_chord_body(0.0)
+    assert np.degrees(aerodynamic_vsm.mid_span_chord_angle_of_attack(body, [10.0, 0.0, 1.0])) == pytest.approx(
+        np.degrees(np.arctan2(1.0, 10.0))
+    )
+    assert aerodynamic_vsm.mid_span_chord_angle_of_attack(body, [10.0, 0.0, -1.0]) < 0.0
+
+
+def test_cold_seed_is_the_default_when_its_angle_of_attack_is_sensible():
+    guess = aerodynamic_vsm.feasible_initial_guess(_one_chord_body(0.0), _StubKite(), (-2.0, 50.0))
+    np.testing.assert_array_equal(guess, aerodynamic_vsm.DEFAULT_GUESS_QS)  # 30 m/s: 5.7 deg
+
+
+def test_cold_seed_slows_down_until_the_wing_meets_the_wind_mid_band():
+    body, kite = _one_chord_body(0.5), _StubKite()  # nose down: -20.9 deg at 30 m/s
+    guess = aerodynamic_vsm.feasible_initial_guess(body, kite, (-2.0, 50.0), aoa_band_deg=(0.0, 15.0))
+    np.testing.assert_array_equal(guess[1:], aerodynamic_vsm.DEFAULT_GUESS_QS[1:])
+    kite.speed_tangential = guess[0]
+    va = np.asarray(aerodynamic_vsm.DEFAULT_TRANSFORMATION_C_FROM_VSM) @ kite.velocity_apparent_wind
+    aoa = np.degrees(aerodynamic_vsm.mid_span_chord_angle_of_attack(body, va))
+    assert 6.0 < aoa < 9.0 and guess[0] < 10.0  # mid-band 7.5 deg
