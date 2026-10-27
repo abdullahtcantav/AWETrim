@@ -32,6 +32,7 @@ from VSM.core.WingGeometry import Wing
 from VSM.core.Solver import Solver
 from VSM.plot_geometry_matplotlib import plot_geometry
 from awetrim.aerodynamics.kcu_drag import KcuDragModel
+from awetrim.aerostructural.case import air_density_at_case
 from awetrim.aerodynamics.line_drag import (
     apply_bridle_drag_diameters,
     bridle_drag_diameters,
@@ -422,7 +423,7 @@ def initialize(
         relaxation_factor=aero_cfg["relaxation_factor"],
         reference_point=aero_cfg["reference_point"],
         mu=config["mu"],
-        rho=config["rho"],
+        rho=air_density_at_case(config),
         # Optional post-stall stabilization: the parameter-free Li/Gaunaa
         # spanwise artificial viscosity (TORQUE 2026), applied in the base
         # gamma loop. Off by default to preserve historical behaviour.

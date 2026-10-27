@@ -40,6 +40,7 @@ from ..convergence import (
 from .. import aerodynamic_vsm, aerodynamic_bridle_line_drag, tracking
 from awetrim import plotting
 from awetrim.aerodynamics.apparent_wind import apparent_wind_at, inflow_state_of
+from awetrim.aerostructural.case import air_density_at_case
 
 from ..mapping import LinearStructuralToAeroMapper
 from ..utils import calculate_cg, rotate_geometry
@@ -291,7 +292,7 @@ def _shared_bridle_line_drag(
                 line,
                 cd_cable=config["aerodynamic_bridle"]["cd_cable"],
                 cf_cable=config["aerodynamic_bridle"]["cf_cable"],
-                rho=config["rho"],
+                rho=air_density_at_case(config),
             ),
             dtype=float,
         )
@@ -356,7 +357,7 @@ def _bridle_line_drag(
         bridle_connectivity_arr,
         bridle_diameter_arr,
         va,
-        config["rho"],
+        air_density_at_case(config),
         config["aerodynamic_bridle"]["cd_cable"],
         config["aerodynamic_bridle"]["cf_cable"],
     )

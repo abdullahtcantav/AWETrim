@@ -98,6 +98,24 @@ class InflowConditions(BaseModel):
         description="Wind speeds [m/s] at heights, default [wind_speed]",
     )
 
+    air_density_law: Literal["constant", "exponential"] = Field(
+        default="constant",
+        description="constant = rho_zero everywhere; exponential = "
+        "rho_zero * exp(-(z + height_gnd)/8550) at the kite height z "
+        "(AtmosphericModels.jl calc_rho)",
+    )
+    rho_zero: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Air density [kg/m3]: sea-level density for the "
+        "exponential law, the density itself for the constant one. "
+        "Default: the system file's value (1.225)",
+    )
+    height_gnd: float = Field(
+        default=0.0,
+        description="Ground altitude above sea level [m] (exponential law)",
+    )
+
     @model_validator(mode="after")
     def _check_samples(self):
         if (self.heights is None) != (self.speeds is None):

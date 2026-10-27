@@ -24,6 +24,7 @@ from . import structural_wireframe
 from . import structural_wireframe
 from .. import aerodynamic_vsm, aerodynamic_bridle_line_drag, tracking
 from awetrim import plotting
+from awetrim.aerostructural.case import air_density_at_case
 from .actuation import (
     steering_half_differences,
     update_power_tape_actuation,
@@ -1032,7 +1033,7 @@ def main(
             bridle_connectivity_arr,
             bridle_diameter_arr,
             vel_app,
-            config["rho"],
+            air_density_at_case(config),
             config["aerodynamic_bridle"]["cd_cable"],
             config["aerodynamic_bridle"]["cf_cable"],
             # With the body, the drag is taken at the TRIM's apparent wind
@@ -1423,7 +1424,7 @@ def main(
                     bridle_connectivity_arr,
                     bridle_diameter_arr,
                     vel_app,
-                    config["rho"],
+                    air_density_at_case(config),
                     config["aerodynamic_bridle"]["cd_cable"],
                     config["aerodynamic_bridle"]["cf_cable"],
                     body_aero=body_aero,

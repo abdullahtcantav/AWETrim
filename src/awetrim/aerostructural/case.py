@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from awetrim.aerostructural.utils import load_sim_output
+from awetrim.environment.profile_laws import air_density
 from awetrim.system.factory import create_system_model_from_yaml
 from awetrim.system.system_model import SystemModel
 
@@ -42,7 +43,34 @@ CONFIG_DEFAULTS: dict = {
     "initial_geometry_rotation_deg": 0.0,
     "initial_geometry_rotation_point": [0.0, 0.0, 0.0],
     "initial_geometry_rotation_axes": ["x", "y", "z"],
+    # Air density: "constant" = rho everywhere; "exponential" = rho is the
+    # sea-level density of profile_laws.air_density, evaluated at the kite
+    # height r sin(beta) above a ground at height_gnd [m] (air_density_at_case).
+    "rho": 1.225,
+    "air_density_law": "constant",
+    "height_gnd": 0.0,
 }
+
+
+def air_density_at_case(config: dict) -> float:
+    """Air density [kg/m3] at the case's kite position.
+
+    The ONE value every aerostructural consumer (VSM, bridle drag, the system
+    model's tether) uses for a case: ``rho`` itself, or with
+    ``air_density_law: exponential`` the density at z = r sin(beta).
+    """
+    rho = float(config.get("rho", CONFIG_DEFAULTS["rho"]))
+    law = config.get("air_density_law", CONFIG_DEFAULTS["air_density_law"])
+    if law == "constant":
+        return rho
+    if law != "exponential":
+        raise ValueError(f"unknown air_density_law {law!r}")
+    elevation = np.deg2rad(
+        float(config.get("angle_elevation_deg", CONFIG_DEFAULTS["angle_elevation_deg"]))
+    )
+    distance = float(config.get("distance_radial", CONFIG_DEFAULTS["distance_radial"]))
+    height_gnd = float(config.get("height_gnd", CONFIG_DEFAULTS["height_gnd"]))
+    return float(air_density(distance * np.sin(elevation), rho, height_gnd=height_gnd))
 
 
 def resolve_kite_paths(
@@ -227,6 +255,10 @@ def configure_system_model_from_config(system_model: SystemModel, config: dict) 
     system_model.timeder_speed_radial = float(
         config.get("timeder_speed_radial", CONFIG_DEFAULTS["timeder_speed_radial"])
     )
+    # The trim's tether sees the same density as the VSM wing and bridle: the
+    # position is fixed per case, so the kite-height value is a constant.
+    system_model.rho = air_density_at_case(config)
+    system_model.kite.air_density_model = None
 
 
 def resolve_starting_struc_nodes(

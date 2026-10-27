@@ -19,6 +19,7 @@ import warnings
 
 import casadi as ca
 from awetrim.aerodynamics.kcu_drag import CT_TURBINE_OPERATING, KcuDragModel, force_drag_kcu
+from awetrim.environment.profile_laws import air_density
 from awetrim.utils.utils import skew_symmetric
 from awetrim.utils.reference_frames import (
     transformation_C_from_W,
@@ -387,8 +388,9 @@ class Wing:
         ) / (va * va_tau + 1e-10)
         drag_direction = vec_va / (va + 1e-10)
         # Aerodynamic forces
-        D = 0.5 * self.rho * va_sq * self.area_wing * CD
-        L = 0.5 * self.rho * va_sq * self.area_wing * CL
+        rho = self.air_density_for(model)
+        D = 0.5 * rho * va_sq * self.area_wing * CD
+        L = 0.5 * rho * va_sq * self.area_wing * CL
 
         aero_forces = D * drag_direction + L * lift_direction
         return aero_forces
@@ -465,7 +467,10 @@ class Kite(Wing):
                 )
         self.steering_control = steering_control
         self.g = g  # Gravitational acceleration
-        self.rho = rho  # Air density
+        self.rho = rho  # Air density (sea-level reference if air_density_model)
+        # None = constant rho. A dict {height_gnd, scale_height} makes the
+        # density exponential in the kite height (profile_laws.air_density).
+        self.air_density_model = None
         self.center_aerodynamic_wing = (
             center_aerodynamic_wing  # Center of aerodynamic pressure
         )
@@ -503,6 +508,20 @@ class Kite(Wing):
 
         self._acceleration_total = None  # Cache for total acceleration
 
+    def air_density_at_height(self, height):
+        """Air density [kg/m3] at ``height`` above ground."""
+        if self.air_density_model is None:
+            return self.rho
+        return air_density(height, self.rho, xp=ca, **self.air_density_model)
+
+    def air_density_for(self, model):
+        """Air density [kg/m3] at the kite, z = r sin(beta)."""
+        if self.air_density_model is None:
+            return self.rho
+        return self.air_density_at_height(
+            model.distance_radial * ca.sin(model.angle_elevation)
+        )
+
     def force_drag_kcu_for(self, model):
         """KCU drag [N, C-frame], hanging on the tether (axis = e_r).
 
@@ -514,7 +533,7 @@ class Kite(Wing):
         return force_drag_kcu(
             model.velocity_apparent_wind,
             [0.0, 0.0, 1.0],
-            self.rho,
+            self.air_density_for(model),
             self.kcu_drag_model.cd_area_axial,
             self.kcu_drag_model.cd_area_broadside,
             xp=ca,

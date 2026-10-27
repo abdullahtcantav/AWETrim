@@ -181,7 +181,7 @@ def force_drag_kcu(
 
     ``xp`` is the math namespace: ``numpy`` (default; plain floats and arrays)
     or ``casadi`` (the CasADi trim builds this force into its graph; the axis
-    is then still numeric, only the apparent wind is symbolic). One formula
+    is then still numeric, the apparent wind and density may be symbolic). One formula
     serves both; the CasADi branch only skips the degenerate-input guards,
     which need numeric values.
     """
@@ -192,7 +192,7 @@ def force_drag_kcu(
         velocity_crossflow = velocity_apparent - velocity_axial
         return (
             0.5
-            * float(density_air)
+            * density_air  # may be symbolic (height-dependent density)
             * (
                 float(cd_area_axial)
                 * xp.norm_2(velocity_axial)

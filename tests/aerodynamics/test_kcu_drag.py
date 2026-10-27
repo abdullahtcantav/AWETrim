@@ -340,3 +340,13 @@ def test_public_signatures():
         "density_air",
         "xp",
     ]
+
+
+def test_casadi_branch_accepts_a_symbolic_density():
+    """A height-dependent density reaches the CasADi law as an expression."""
+    ca = pytest.importorskip("casadi")
+    rho = ca.MX.sym("rho")
+    va = ca.MX.sym("va", 3)
+    force = force_drag_kcu(va, [0.0, 0.0, 1.0], rho, 0.1, 0.4, xp=ca)
+    assert force.shape == (3, 1)
+    assert ca.depends_on(force, rho)
