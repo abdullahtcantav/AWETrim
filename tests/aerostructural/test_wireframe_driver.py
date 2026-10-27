@@ -28,9 +28,14 @@ def test_restore_puts_back_the_saved_structure(case, tmp_path):
     stiffnesses = np.asarray(structural_wireframe.get_stiffnesses(psystem)) * 1.5
     structural_wireframe.set_stiffnesses(psystem, stiffnesses)
     rest_lengths = np.asarray(structural_wireframe.get_rest_lengths(psystem))
+    # tracking positions[-1] is the shape after the final trim rotation; the
+    # structure's own positions are saved apart and are what comes back
     h5 = save_sim_output(
-        {"positions": np.stack([positions - 0.01, positions])},
-        {"n_iter": 2, "rest_lengths": rest_lengths, "final_stiffnesses": stiffnesses},
+        {"positions": np.stack([positions - 0.01, positions + 0.02])},
+        {
+            "n_iter": 2, "rest_lengths": rest_lengths, "final_stiffnesses": stiffnesses,
+            "structure_positions": positions,
+        },
         tmp_path,
     )
 
@@ -48,6 +53,17 @@ def test_restore_puts_back_the_saved_structure(case, tmp_path):
     assert fresh.power_tape_length == pytest.approx(solved.power_tape_length)
     assert fresh.steering_half_difference == pytest.approx(0.05)
     assert fresh.steering_half_difference == pytest.approx(solved.steering_half_difference)
+
+
+def test_restore_of_an_older_file_takes_the_last_tracked_positions(case, tmp_path):
+    prepared = driver.prepare_structure(case)
+    positions = np.asarray(prepared.psystem.positions, dtype=float) + 0.03
+    rest_lengths = structural_wireframe.get_rest_lengths(prepared.psystem)
+    h5 = save_sim_output(
+        {"positions": positions[None]}, {"n_iter": 1, "rest_lengths": rest_lengths}, tmp_path
+    )
+    prepared.restore(h5)
+    np.testing.assert_allclose(prepared.psystem.positions, positions, atol=0)
 
 
 def test_restore_refuses_another_structure(case, tmp_path):

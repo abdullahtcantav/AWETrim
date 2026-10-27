@@ -345,7 +345,15 @@ class PreparedWireframe:
         steering half-difference is measured from.
         """
         metadata, tracking = load_sim_output(sim_output_path)
-        positions = np.asarray(tracking["positions"], dtype=float)[-1]
+        # Older files lack structure_positions; their positions[-1] carries the
+        # final trim rotation (2 cm at the LEI-V3 tips), so a chain resumed
+        # from one starts off the uninterrupted one. It converges to the same
+        # state (1e-6 deg AoA), but not bit-identically as it does from
+        # structure_positions.
+        positions = np.asarray(
+            metadata.get("structure_positions", np.asarray(tracking["positions"])[-1]),
+            dtype=float,
+        )
         rest_lengths = np.asarray(metadata["rest_lengths"], dtype=float)
         current = np.asarray(structural_wireframe.get_rest_lengths(self.psystem), dtype=float)
         if positions.shape != self.psystem.positions.shape or rest_lengths.shape != current.shape:
