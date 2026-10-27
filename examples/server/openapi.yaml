@@ -641,6 +641,38 @@ components:
             mean over the path of azimuth^2 >= value^2/2, which a figure-eight or helix of
             half-width A satisfies with A >= value). Guards the degenerate zero-width collapse.
             0/omitted = off.'
+        elevation_amplitude_max:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: 0.0
+          - type: 'null'
+          title: Elevation Amplitude Max
+          description: 'The figure''s elevation half-span stays <= this [deg] (one smooth
+            constraint: mean over the path of (elevation - mean)^2 <= value^2/2, which a figure-eight
+            or helix of half-span B satisfies with B <= value). Caps how TALL the pattern
+            is where ``elevation_max`` only caps where it may sit. 0/omitted = off.'
+        symmetric:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Symmetric
+          description: 'True = the figure-eight is mirror-symmetric about azimuth 0: half
+            a period later the kite is at the mirrored point (M/2 linear equality rows on
+            the spline coefficients, so M must be even). Removes the lopsided optima of the
+            multi-modal solve. false/omitted = off.'
+        climb_angle_max:
+          anyOf:
+          - type: number
+            exclusiveMaximum: 90.0
+            minimum: 0.0
+          - type: 'null'
+          title: Climb Angle Max
+          description: 'Wherever the path CLIMBS (elevation rising along the flight direction),
+            its slope in the azimuth/elevation plane stays <= this [deg]: d(elevation) <=
+            tan(value) * |d(azimuth)|, plain angles, no cos(elevation) factor. Descending
+            is free, so the vertical dives at the sides stay allowed. One smooth row per turn-radius
+            sample. 0/omitted = off.'
       additionalProperties: false
       type: object
       title: PatternLimits
@@ -1073,6 +1105,76 @@ components:
           title: K V Bounds
           description: '[k_v_min, k_v_max] bracket for the optimized gain; defaults to a factor
             2 either side of k_v. Ignored unless optimize_k_v is true.'
+        softplus_beta:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Softplus Beta
+          description: Corner sharpness of the UPPER force limit [1/N]; larger is sharper,
+            and the transition spans a tension band of order 1/beta. Unset keeps the server
+            default (1e-3).
+        softminus_beta:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Softminus Beta
+          description: Corner sharpness of the LOWER force limit [1/N]; larger is sharper.
+            NO LONGER APPLIED for a quadratic law with f_min > 0, which uses the reel-in line
+            below f_min instead -- softminus's effective floor is softplus(beta*f_min)/beta,
+            which cannot fall below log(2)/beta (693 N at 1e-3) whatever f_min is asked for,
+            and that is above the whole force range a low-wind run reaches.
+        use_awe_trim:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Use Awe Trim
+          description: 'Blend in [0, 1] between the two winch curves: 0 (default) is the reel-in
+            law described above, 1 is the plain quadratic under softminus that it replaced,
+            and values between mix the two forces linearly. The endpoints differ most at zero
+            reel speed, where the reel-in law holds f_min and softminus holds softplus(beta*f_min)/beta.'
+          default: 0.0
+        winch_mode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Winch Mode
+          description: '''force_law'' (default) ties the tension to the reel speed through
+            the curve above, as a per-node equality. ''free_speed'' drops that equality: the
+            reel speed becomes a direct, acceleration-limited control and the winch only bounds
+            the tension to [f_min, f_max]. Use it when the force law''s flat regions (dT/dv_r
+            ~ 0) stall the solve -- but note the reply is then the best path for ANY winch
+            inside that force band, not for the k_v law you sent, so its predicted power is
+            an upper bound rather than a prediction of your controller.'
+        v_reel_in:
+          anyOf:
+          - type: number
+            exclusiveMaximum: 0.0
+          - type: 'null'
+          title: V Reel In
+          description: 'Reel-in law: reel-in speed [m/s] at zero force. Unset keeps the server
+            default (-2.0). Must be negative.'
+        reel_in_beta:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Reel In Beta
+          description: 'Reel-in law: sharpness of the smooth handover between the reel-in
+            line and the quadratic law [s/m]. Unset keeps the server default (20.0). Unlike
+            softminus_beta above, this has no matching sharpness requirement against f_min/k_v
+            -- the forward law''s quadratic term has zero, not infinite, slope at its own
+            zero, so soft_max stays well-behaved for any positive value.'
+        v_sat_beta:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: V Sat Beta
+          description: Corner sharpness of the soft reel-speed clamp at v_max [s/m]; larger
+            is sharper. Requires v_max or p_max. Unset keeps the plain law, cut off by the
+            v_max speed bound (a hard clamp).
       additionalProperties: false
       type: object
       required:

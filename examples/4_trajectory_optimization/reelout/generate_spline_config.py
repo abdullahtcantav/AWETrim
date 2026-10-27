@@ -1,7 +1,10 @@
 """Generate reelout B-spline YAML configs from simple initial curves.
 
 Edit the constants in the "Defaults" section for quick experiments, or pass
-the same values through the command line. The B-spline implementation lives in
+the same values through the command line. The config is written to
+cycle_configs/generated_spline.yaml (git-ignored); the shipped
+downloop_spline.yaml is only the template it starts from. To replace a shipped
+config, name it with --output. The B-spline implementation lives in
 ``awetrim.kinematics.parametrized_patterns``; this script only writes configs.
 """
 
@@ -33,7 +36,7 @@ from awetrim.utils.color_palette import get_color_list, set_plot_style_no_latex
 # Defaults: edit these for quick config-generation experiments
 # ---------------------------------------------------------------------------
 TEMPLATE_PATH = LEI_V3_DOWNLOOP_SPLINE_CONFIG
-OUTPUT_PATH = LEI_V3_DOWNLOOP_SPLINE_CONFIG
+OUTPUT_PATH = LEI_V3_GENERATED_SPLINE_CONFIG
 
 CURVE_TYPE = "lissajous"  # "lissajous", "lemniscate" (smoother eight) or "helix"
 SPLINE_TYPE = "periodic"  # "periodic" or "open"
