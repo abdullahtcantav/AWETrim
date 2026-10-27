@@ -156,6 +156,42 @@ def test_init_validation_errors(client):
     assert "not found" in response.json()["detail"]
 
 
+def test_init_selects_and_echoes_the_rom(client, monkeypatch, tmp_path):
+    kite = tmp_path / "kite"
+    kite.mkdir()
+    system_yaml = kite / "system.yaml"
+    system_yaml.write_text(
+        "models:\n  reduced_order:\n    aerodynamics: rom_default.yaml\n"
+    )
+    (kite / "rom_default.yaml").write_text("stub: true\n")
+    (kite / "rom_other.yaml").write_text("stub: true\n")
+    calls = []
+    monkeypatch.setattr(
+        session_mod,
+        "create_system_model_from_yaml",
+        lambda yaml_path, **kw: calls.append(kw) or SimpleNamespace(wind=None),
+    )
+
+    # Default: the ROM the system file names, built exactly as before.
+    payload = dict(client.init_payload, system_config_path=str(system_yaml))
+    response = client.post("/init", json=payload)
+    assert response.status_code == 200
+    assert response.json()["rom_config"] == "rom_default.yaml"
+    assert calls[-1] == {}
+
+    # Explicit: a name relative to the system file's folder.
+    payload["rom_config_path"] = "rom_other.yaml"
+    response = client.post("/init", json=payload)
+    assert response.status_code == 200
+    assert response.json()["rom_config"] == "rom_other.yaml"
+    assert calls[-1]["aero_yaml_path"] == kite / "rom_other.yaml"
+
+    payload["rom_config_path"] = "no_such_rom.yaml"
+    response = client.post("/init", json=payload)
+    assert response.status_code == 400
+    assert "not found" in response.json()["detail"]
+
+
 def test_step_rejects_low_level_wind_field(client):
     """/step, too, only takes inflow_conditions."""
     assert client.post("/init", json=client.init_payload).status_code == 200

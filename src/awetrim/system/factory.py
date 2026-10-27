@@ -174,6 +174,58 @@ def load_aero_input(
     return cfg.get("wing", {}).get("aerodynamics", {})
 
 
+def load_rom_depower_validity(
+    cfg: dict,
+    config_path: Union[str, Path, None] = None,
+    aero_yaml_path: Union[str, Path, None] = None,
+) -> tuple[float, float] | None:
+    """The ``validity.input_depower`` band of the system's ROM file, if stated.
+
+    A polynomial ROM extrapolates freely in u_p outside the depower range it
+    was identified on, and an optimizer with a wider actuator box follows the
+    extrapolation (an LEI-V3 server run on the flight-corrected ROM ran to the
+    bottom of the 1.1 m box at the winch limits). ``None`` when the ROM is
+    inline or the file states no band.
+    """
+    base_path = Path(config_path) if config_path is not None else None
+    aero_path = _resolve_aero_config_path(cfg, base_path, aero_yaml_path)
+    if aero_path is None:
+        return None
+    band = ((_load_yaml(aero_path).get("validity") or {}).get("input_depower"))
+    if not band:
+        return None
+    return float(min(band)), float(max(band))
+
+
+def intersect_depower_validity(
+    hardware_limits: dict, band: tuple[float, float] | None
+) -> dict:
+    """Clip the optimizer's ``input_depower`` box to the ROM's validity band.
+
+    The box is the actuator range (system.yaml) where given, else
+    ``DEFAULT_OPTI_LIMITS``; the result is their intersection. A run that
+    deliberately wants to extrapolate overrides it through
+    ``sim_parameters["opti_limits_override"]["input_depower"]``.
+    """
+    if band is None:
+        return hardware_limits
+    from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
+
+    lo, hi = hardware_limits.get("input_depower", DEFAULT_OPTI_LIMITS["input_depower"])
+    clipped = (max(float(lo), band[0]), min(float(hi), band[1]))
+    if clipped[0] >= clipped[1]:
+        raise ValueError(
+            f"depower actuator range [{lo}, {hi}] does not overlap the ROM's "
+            f"validity band [{band[0]}, {band[1]}]"
+        )
+    if clipped != (float(lo), float(hi)):
+        print(
+            f"  depower box [{lo}, {hi}] clipped to the ROM validity band -> "
+            f"[{clipped[0]:.4g}, {clipped[1]:.4g}]"
+        )
+    return {**hardware_limits, "input_depower": clipped}
+
+
 def _extract_params_awesio(cfg: dict) -> tuple:
     """Extract model parameters from an awesIO-format config dict."""
     try:
@@ -355,6 +407,12 @@ def create_system_model_from_yaml(
     if "components" in cfg:
         aero_cfg = load_aero_input(
             cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
+        )
+        hardware_limits = intersect_depower_validity(
+            hardware_limits,
+            load_rom_depower_validity(
+                cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
+            ),
         )
 
     tether = create_tether_from_config(

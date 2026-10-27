@@ -1157,6 +1157,34 @@ cut total VSM evaluations ~30% at identical outer iteration count and final
 state; 20 was WORSE than 8 — spend little per iteration. Absent key =
 historical behaviour.
 
+### Bilinear load map: spanwise station by 3-D projection (2026-10-26)
+
+`BilinearAeroToStructuralLoadMapper.map_loads` (both drivers) takes a panel's
+spanwise weight `eta` as the projection of its cp on the 3-D LE segment. It
+was the y-ratio `(cp_y - y_lo) / dy_le`, which is ill-conditioned where the
+LE curls down at the tip (LEI-V3 nodes 17-19: 805 mm long, a few mm in y). At
+45 deg elevation the kite drifts ~4 mm per iteration; each time `dy_le`
+crossed zero the clipped `eta` flipped 0 <-> 1, ~25 N of tip-panel load jumped
+from node 19 to 17/18, and the residual spiked ~37 N for two iterations every
+5-6 iterations (Aitken off and Anderson showed the same cycle). On panels
+whose LE runs mostly along y the two definitions nearly coincide; stored
+results shift slightly through the tip panels.
+
+### Pre-loop trim bounds (quasi_steady_trim.pre_loop, 2026-10-26)
+
+Both coupled drivers rotate the structure by every trim's roll/pitch/yaw
+(`rotate_geometry` after each `run_vsm_package`), so inside the loop the
+`*_bounds_deg` limit a per-iteration INCREMENT, while on the pre-loop trim
+(undeformed geometry) they limit the whole attitude. Keys in the optional
+`pre_loop` sub-block override the block's own for that one call
+(`aerodynamic_vsm.pre_loop_trim_config`). The LEI-V3 `as_config.yaml` sets
+roll/pitch/yaw to +-15 deg there and keeps +-4 deg in the loop. Why: at 40 deg
+elevation the first trim needs ~10 deg of yaw; pinned at 4 it closed the yaw
+moment with a ~2 rad/s course rate, the tips stalled, the first structural
+step swung the kite ~22 deg about the KCU and VSM returned NaN. Same date:
+`_warn_if_trim_on_bounds` takes `rel_tol=1e-3` of the span, since TRF stops
+strictly inside the box (yaw 3.9987 on [-4, 4]) and 1e-6 never fired.
+
 ### Trim solver (quasi_steady_trim.solver, 2026-09-15)
 
 ``least_squares`` (default, every stored result) is the NumPy trim: scipy

@@ -605,6 +605,9 @@ def main(
     speed_bound_counter = 0
     runaway_should_break = False
     stop_reason = None
+    # Why the loop ended, the same values as the Billow driver:
+    # converged | stagnated | diverged | stopped | max_iter.
+    exit_reason = "max_iter"
     # Second exit condition: the tether force must have settled since the last
     # state change (convergence.force_settle_state). 0 disables. Gates the
     # main tier only; the plateau fallback keeps its own acceptance.
@@ -982,8 +985,9 @@ def main(
         include_gravity=config["is_with_gravity"],
         is_with_plot=config["is_with_aero_plot_per_iteration"],
         # Lets the trim carry the tether when
-        # config["tether"]["include_in_trim"] is set.
-        config=config,
+        # config["tether"]["include_in_trim"] is set. The pre-loop trim
+        # sets the whole attitude, so it takes quasi_steady_trim.pre_loop.
+        config=aerodynamic_vsm.pre_loop_trim_config(config),
     )
     logging.debug(
         f"Aero symmetry check, f_aero_y: {np.sum([force[1] for force in f_aero_wing_vsm_format])}"
@@ -1979,6 +1983,14 @@ def main(
                 and is_modulus_ramp_finalized
                 and is_elongation_satisfied
             ):
+                if is_convergence:
+                    exit_reason = "converged"
+                elif is_stagnated:
+                    exit_reason = "stagnated"
+                elif not np.all(np.isfinite(np.asarray(f_residual, dtype=float))):
+                    exit_reason = "diverged"
+                else:
+                    exit_reason = "stopped"
                 break
     ######################################################################
     ## END OF SIMULATION FOR LOOP
@@ -2179,6 +2191,15 @@ def main(
     except Exception:
         tether_force = np.nan
 
+    # Final word on why the run ended: the plateau acceptance above can still
+    # turn a max_iter / stagnated run into a converged one (see
+    # converged_at_fallback), and a trim_speed_bound stop leaves the loop
+    # without passing the exit check.
+    if is_convergence:
+        exit_reason = "converged"
+    elif stop_reason is not None:
+        exit_reason = "stopped"
+
     meta = {
         "total_time_s": time.time() - start_time,
         "n_iter": i + 2,  # +2: 1 for pre-loop initial state + (i+1) loop entries
@@ -2187,6 +2208,9 @@ def main(
         # convergence / stagnation / max_iter: "trim_speed_bound" (runaway
         # stop, see qs_speed_bound_patience). None otherwise.
         "stop_reason": stop_reason,
+        # Why the loop ended, the same values as the Billow driver:
+        # converged | stagnated | diverged | stopped | max_iter.
+        "exit_reason": exit_reason,
         # The nodal force residual the run ENDED on, and the threshold it was
         # tested against. Reporting only; the criterion itself is unchanged
         # (check_convergence still owns it). A continuation needs this per

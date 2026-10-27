@@ -49,7 +49,10 @@ from awetrim.kinematics.parametrized_patterns import (
     make_bspline_path_parameters_from_named_curve,
 )
 from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
-from awetrim.system.factory import create_system_model_from_yaml
+from awetrim.system.factory import (
+    create_system_model_from_yaml,
+    resolve_rom_config_path,
+)
 from awetrim.timeseries.phase import Phase
 from awetrim.utils.config_paths import (
     LEI_V3_DOWNLOOP_SPLINE_CONFIG,
@@ -216,6 +219,7 @@ class ReeloutSession:
         self._name: str = "reelout-optimization"
         self._winch_params: Optional[dict] = None
         self._depower_mode: str = "optimize"
+        self._rom_config: Optional[str] = None
         # Resolution of the degree-table replies: matches the client-sent
         # trajectory when there is one, else falls back to n_points.
         self._trajectory_points: Optional[int] = None
@@ -243,7 +247,12 @@ class ReeloutSession:
             if not Path(path).exists():
                 raise FileNotFoundError(f"config file not found: {path}")
 
-        system_model = create_system_model_from_yaml(yaml_path=system_path)
+        rom_path = resolve_rom_config_path(system_path, config.get("rom_config_path"))
+        if config.get("rom_config_path") and not (rom_path and rom_path.exists()):
+            raise FileNotFoundError(f"config file not found: {rom_path}")
+
+        rom_kwargs = {"aero_yaml_path": rom_path} if config.get("rom_config_path") else {}
+        system_model = create_system_model_from_yaml(yaml_path=system_path, **rom_kwargs)
         reelout_config, _ = load_cycle_config_from_yaml(cycle_path)
         reelout_config = copy.deepcopy(reelout_config)
         sim_parameters = reelout_config.setdefault("sim_parameters", {})
@@ -339,6 +348,7 @@ class ReeloutSession:
             self._n_points = n_points
             self._name = config.get("name") or "reelout-optimization"
             self._winch_params = dict(winch) if winch else None
+            self._rom_config = rom_path.name if rom_path else None
             if trajectory:
                 self._trajectory_points = len(trajectory["azimuth"])
             self.state = SessionState.READY
@@ -1161,6 +1171,7 @@ class ReeloutSession:
             "reg_weight": sim_parameters.get("reg_weight"),
             "detect_simple_bounds": sim_parameters.get("detect_simple_bounds"),
             "depower": self.depower_state(),
+            "rom_config": self._rom_config,
             "min_turn_radius": self.min_turn_radius(),
             "pattern_limits": self.pattern_limits(),
             "state": self.state.value,

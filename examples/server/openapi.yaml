@@ -396,6 +396,12 @@ components:
           anyOf:
           - $ref: '#/components/schemas/DepowerReply'
           - type: 'null'
+        rom_config:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rom Config
+          description: File name of the reduced-order aerodynamic model in use
         min_turn_radius:
           anyOf:
           - type: number
@@ -472,6 +478,15 @@ components:
           - type: string
           - type: 'null'
           title: System Config Path
+        rom_config_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rom Config Path
+          description: Reduced-order aerodynamic model to fly instead of the one the system
+            file names (models.reduced_order.aerodynamics); a relative path is taken against
+            the system file's folder, so 'rom_config_aerostructural.yaml' selects the LEI-V3
+            simulation-only ROM. The init reply echoes the file in use.
         cycle_config_path:
           anyOf:
           - type: string

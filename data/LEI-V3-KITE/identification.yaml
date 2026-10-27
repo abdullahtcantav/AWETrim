@@ -118,9 +118,10 @@ fit:
         input_depower:
           powered: 2.1
           depowered: 2.5
-    # The shipped ROM's band, on which the wireframe matches the flight.
+    # The shipped ROM's band: down to 1.33 m, so the optimiser can explore
+    # tapes shorter than the flown 1.7 m.
     wireframe:
-      depower_band: [1.6, 2.2]
+      depower_band: [1.3, 2.2]
       controls:
         input_depower:
           powered: 1.7
