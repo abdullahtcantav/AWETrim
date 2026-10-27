@@ -67,13 +67,37 @@ DEFAULT_GUESS_QS = np.array(
 _QS_STATE_NAMES = ("kite_speed", "roll", "pitch", "yaw", "course_rate")
 
 
-def _warn_if_trim_on_bounds(opt_x, bounds_lower, bounds_upper, rel_tol=1e-6) -> list:
+def pre_loop_trim_config(config: dict | None) -> dict | None:
+    """Return ``config`` with ``quasi_steady_trim.pre_loop`` applied.
+
+    The coupled drivers rotate the structure by every trim's roll/pitch/yaw,
+    so inside the loop the trim bounds limit a per-iteration increment, while
+    on the pre-loop trim they limit the whole attitude. The ``pre_loop`` keys
+    override the block's own for that one call; without them ``config`` is
+    returned unchanged.
+    """
+    if not config:
+        return config
+    key = "quasi_steady_trim" if "quasi_steady_trim" in config else "quasi_steady"
+    qs_cfg = config.get(key) or {}
+    overrides = qs_cfg.get("pre_loop") or {}
+    if not overrides:
+        return config
+    return {**config, key: {**qs_cfg, **overrides}}
+
+
+def _warn_if_trim_on_bounds(opt_x, bounds_lower, bounds_upper, rel_tol=1e-3) -> list:
     """Warn for each trim unknown that ended on its search bound.
 
     ``least_squares`` reports ``success=True`` for a constrained optimum, so a
     trim pinned against a bound looks converged while being no equilibrium at
     all -- the force balance wanted a value the box forbade. Returns the list of
     ``(name, value, "lower"/"upper")`` that are pinned (empty if none).
+
+    ``rel_tol`` is a fraction of the bound span. The TRF method stays strictly
+    inside the box, so a pinned trim stops just short of the bound: yaw
+    3.9987 on [-4, 4] at 40 deg elevation (2026-10-22), which the former
+    1e-6 never caught.
     """
     if opt_x is None:
         return []

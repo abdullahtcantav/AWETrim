@@ -143,3 +143,28 @@ def test_skin_subdivides_like_the_reference_mesh():
     nodes, le, te = _skin_case()
     skin = _Skin().initialize(nodes, [1, 3, 5], [2, 4, 6], le, te, n_panels_per_section=2)
     assert skin.map(nodes).leading_edge_points.shape == (2 * (len(le) - 1) + 1, 3)
+
+
+def test_bilinear_mapper_is_continuous_on_a_near_vertical_le_segment():
+    """A wing-tip LE that curls down: the segment runs along z with almost no
+    y extent. Moving a node by a millimetre across y must not throw the
+    panel load from one LE node to the other."""
+    mapper = BilinearAeroToStructuralLoadMapper()
+    mapping = mapper.initialize(
+        [Panel([0.5, 4.0005, 0.25])],
+        np.asarray(
+            [[0.0, 4.0, 0.0], [1.0, 4.0, 0.0], [0.0, 4.001, 0.5], [1.0, 4.001, 0.5]]
+        ),
+        le_node_indices=np.asarray([0, 2]),
+        te_node_indices=np.asarray([1, 3]),
+    )
+    panel_forces = np.asarray([[0.0, 0.0, 10.0]])
+    panel_points = np.asarray([[0.5, 4.0005, 0.25]])
+    loads = []
+    for dy in (-1e-3, 1e-3):
+        nodes = np.asarray(
+            [[0.0, 4.0, 0.0], [1.0, 4.0, 0.0], [0.0, 4.0 + dy, 0.5], [1.0, 4.0 + dy, 0.5]]
+        )
+        loads.append(mapper.map_loads(panel_forces, panel_points, nodes, mapping))
+    np.testing.assert_allclose(loads[0], loads[1], atol=0.05)
+    np.testing.assert_allclose(np.sum(loads[1], axis=0), panel_forces[0])

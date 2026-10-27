@@ -981,8 +981,9 @@ def main(
         include_gravity=config["is_with_gravity"],
         is_with_plot=config["is_with_aero_plot_per_iteration"],
         # Lets the trim carry the tether when
-        # config["tether"]["include_in_trim"] is set.
-        config=config,
+        # config["tether"]["include_in_trim"] is set. The pre-loop trim
+        # sets the whole attitude, so it takes quasi_steady_trim.pre_loop.
+        config=aerodynamic_vsm.pre_loop_trim_config(config),
     )
     logging.debug(
         f"Aero symmetry check, f_aero_y: {np.sum([force[1] for force in f_aero_wing_vsm_format])}"

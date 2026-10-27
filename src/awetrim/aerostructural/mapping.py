@@ -234,8 +234,15 @@ class BilinearAeroToStructuralLoadMapper:
             r_te_lo = nodes[te_lo]
             r_te_hi = nodes[te_hi]
 
-            dy_le = r_le_hi[1] - r_le_lo[1]
-            eta = 0.5 if abs(dy_le) < 1e-6 else (cp[1] - r_le_lo[1]) / dy_le
+            # Spanwise station: projection on the 3-D LE segment. Not the
+            # y-ratio it was until 2026-10-26: at the tip the LE curls down to
+            # near-vertical (LEI-V3 nodes 17-19: 805 mm long, a few mm in y),
+            # so a mm of drift flipped the sign of dy and threw the whole tip
+            # panel load to the other node -- a 2-iteration ~37 N residual
+            # spike every 5-6 iterations at 45 deg elevation.
+            le_seg = r_le_hi - r_le_lo
+            le_seg_sq = np.dot(le_seg, le_seg)
+            eta = 0.5 if le_seg_sq < 1e-12 else np.dot(cp - r_le_lo, le_seg) / le_seg_sq
             eta = np.clip(eta, 0.0, 1.0)
 
             chord_lo = r_te_lo - r_le_lo
