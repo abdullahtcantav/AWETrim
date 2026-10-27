@@ -13,7 +13,10 @@ with HTTP or polling directly:
         inflow_conditions={"wind_speed": 8.4, "wind_direction": 265.0,
                            "profile_law": 6,
                            "heights": [10, 50, 100, 200, 300],
-                           "speeds": [5.5, 7.4, 8.0, 9.3, 8.6]},
+                           "speeds": [5.5, 7.4, 8.0, 9.3, 8.6],
+                           # optional: density falling with height
+                           "air_density_law": "exponential",
+                           "rho_zero": 1.225, "height_gnd": 0.0},
         length=220.0,
     )
 

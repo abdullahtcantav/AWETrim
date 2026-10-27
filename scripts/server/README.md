@@ -248,6 +248,9 @@ height; the profile law extends it upwards:
 | `turbulence` | 0.0 | accepted and echoed, but **not used**: the optimizer is deterministic and works on the mean profile |
 | `heights` | `[6.0]` | sample heights [m], for the `CUSTOM_*` laws |
 | `speeds` | `[wind_speed]` | wind speeds [m/s] at `heights` |
+| `air_density_law` | `"constant"` | `"constant"` = `rho_zero` everywhere; `"exponential"` = `rho_zero*exp(-(z + height_gnd)/8550)` at the kite height `z` (AtmosphericModels.jl `calc_rho`), used for the wing, KCU and tether loads |
+| `rho_zero` | system file (1.225) | air density [kg/m³]; the sea-level density for `"exponential"` |
+| `height_gnd` | 0.0 | ground altitude above sea level [m] (`"exponential"`) |
 
 The laws are those of AtmosphericModels.jl, normalized to `wind_speed` at 6 m:
 `EXP` = `(z/6)^alpha`, `LOG` = `ln(z/z0)/ln(6/z0)`, `EXPLOG` = `2*LOG - EXP`.

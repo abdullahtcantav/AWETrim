@@ -31,8 +31,8 @@ import httpx
 @dataclass
 class InflowConditions:
     wind_speed: float                   # in m/s at 6 m height
-    wind_direction: float=270.0         # in degrees, 0 = North, 90 = East
     profile_law: int                    # 0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4=CUSTOM_LOG, 5=CUSTOM_EXP, 6=CUSTOM_JET
+    wind_direction: float = 270.0       # in degrees, 0 = North, 90 = East
     # the custom profiles are fitted using the heights and speeds given in the heights and speeds fields
     # CUSTOM_JET: u(z) = u_bg(z) + U_J * exp(-(z - z_c)^2 / (2*sigma^2))
     # the following fields are optional; leave them at None to get the server
@@ -42,6 +42,11 @@ class InflowConditions:
     turbulence: Optional[float] = None  # in [0, 1], 0 = no turbulence, 1 = full turbulence, default: 0.0
     heights: Optional[List[float]] = None  # heights at which the wind speed is given, default: [6.0]
     speeds: Optional[List[float]] = None   # wind speeds at the given heights, default: [wind_speed]
+    # air density: "constant" = rho_zero everywhere, "exponential" =
+    # rho_zero * exp(-(z + height_gnd)/8550) at the kite height z
+    air_density_law: Optional[str] = None  # "constant" | "exponential", default: "constant"
+    rho_zero: Optional[float] = None       # [kg/m^3], sea-level density, default: the system file's (1.225)
+    height_gnd: Optional[float] = None     # ground altitude above sea level [m], default: 0.0
 
 
 @dataclass
@@ -120,7 +125,7 @@ def _payload(params) -> dict:
         for key, value in asdict(params).items()
         if value is not None
     }
-    for key in ("winch_params", "depower", "pattern_limits"):
+    for key in ("winch_params", "depower", "pattern_limits", "inflow_conditions"):
         if isinstance(payload.get(key), dict):
             payload[key] = {k: v for k, v in payload[key].items() if v is not None}
     if "depower" in payload:

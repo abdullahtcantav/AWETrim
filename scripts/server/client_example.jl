@@ -35,6 +35,11 @@ Base.@kwdef struct InflowConditions
     turbulence::Float64 = 0.0               # in [0, 1], 0 = no turbulence, 1 = full turbulence
     heights::Vector{Float64} = [6.0]        # heights at which the wind speed is given
     speeds::Vector{Float64} = [wind_speed]  # wind speeds at the given heights
+    # air density: "constant" = rho_zero everywhere, "exponential" =
+    # rho_zero * exp(-(z + height_gnd)/8550) at the kite height z
+    air_density_law::String = "constant"    # "constant" | "exponential"
+    rho_zero::Float64 = 1.225               # sea-level air density                                 [kg/m^3]
+    height_gnd::Float64 = 0.0               # ground altitude above sea level                       [m]
 end
 
 struct WinchParams
@@ -99,7 +104,10 @@ function as_inflow(d)
               (; heights = Float64.(d["heights"]), speeds = Float64.(d["speeds"]))
     return InflowConditions(; wind_speed = d["wind_speed"], wind_direction = d["wind_direction"],
                             profile_law = d["profile_law"], alpha = d["alpha"], z0 = d["z0"],
-                            turbulence = d["turbulence"], samples...)
+                            turbulence = d["turbulence"],
+                            air_density_law = get(d, "air_density_law", "constant"),
+                            rho_zero = something(get(d, "rho_zero", nothing), 1.225),
+                            height_gnd = get(d, "height_gnd", 0.0), samples...)
 end
 
 function as_init_params(reply)
