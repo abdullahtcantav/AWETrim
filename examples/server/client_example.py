@@ -20,7 +20,7 @@ message; the previous trajectory remains available under GET /trajectory.
 """
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import List, Optional
 
 import httpx
@@ -31,7 +31,7 @@ import httpx
 @dataclass
 class InflowConditions:
     wind_speed: float                   # in m/s at 6 m height
-    wind_direction: float=270.0         # in degrees, 0 = North, 90 = East
+    wind_direction: float               # FROM, in degrees, 0 = North, 90 = East (server default 0)
     profile_law: int                    # 0=CONST, 1=EXP, 2=LOG, 3=EXPLOG, 4=CUSTOM_LOG, 5=CUSTOM_EXP, 6=CUSTOM_JET
     # the custom profiles are fitted using the heights and speeds given in the heights and speeds fields
     # CUSTOM_JET: u(z) = u_bg(z) + U_J * exp(-(z - z_c)^2 / (2*sigma^2))
@@ -128,14 +128,23 @@ def _payload(params) -> dict:
     return payload
 
 
+def _struct(cls, block: dict):
+    """``cls`` from a reply block, keeping only the fields ``cls`` declares:
+    the server echoes its own extensions (extra winch options, pattern
+    limits, ...), and a client written against these structs must keep
+    working when the server gains one."""
+    names = {f.name for f in fields(cls)}
+    return cls(**{k: v for k, v in block.items() if k in names})
+
+
 def _depower(reply: dict) -> Optional[DepowerParams]:
     block = reply.get("depower")
-    return DepowerParams(**block) if block else None
+    return _struct(DepowerParams, block) if block else None
 
 
 def _pattern_limits(reply: dict) -> Optional[PatternLimits]:
     block = reply.get("pattern_limits")
-    return PatternLimits(**block) if block else None
+    return _struct(PatternLimits, block) if block else None
 
 
 def _post(path: str, payload: dict) -> dict:
@@ -150,9 +159,9 @@ def _init_params(reply: dict) -> InitParams:
     return InitParams(
         name=reply["name"],
         length=reply["length"],
-        winch_params=WinchParams(**reply["winch_params"]),
-        inflow_conditions=InflowConditions(**reply["inflow_conditions"]),
-        trajectory=Trajectory(**reply["trajectory"]),
+        winch_params=_struct(WinchParams, reply["winch_params"]),
+        inflow_conditions=_struct(InflowConditions, reply["inflow_conditions"]),
+        trajectory=_struct(Trajectory, reply["trajectory"]),
         input_depower=reply["input_depower"],
         reg_weight=reply["reg_weight"],
         detect_simple_bounds=reply["detect_simple_bounds"],
@@ -183,8 +192,8 @@ def step(
     reply = _post("/step", payload)
     return StepParams(
         length=reply["length"],
-        winch_params=WinchParams(**reply["winch_params"]),
-        trajectory=Trajectory(**reply["trajectory"]),
+        winch_params=_struct(WinchParams, reply["winch_params"]),
+        trajectory=_struct(Trajectory, reply["trajectory"]),
         depower=_depower(reply),
         min_turn_radius=reply.get("min_turn_radius"),
         pattern_limits=_pattern_limits(reply),
@@ -215,7 +224,8 @@ if __name__ == "__main__":
                               profile_law=2, z0=0.03)
 
     # 200 m of tether; the solver knobs are left at their defaults
-    reply = init(InitParams("python-sim-1", 600.0, 200.0, winch, inflow, guess))
+    reply = init(InitParams(name="python-sim-1", length=200.0, winch_params=winch,
+                            inflow_conditions=inflow, trajectory=guess))
     print(f"init ok: {reply.name}, "
           f"starting path {len(reply.trajectory.azimuth)} pts")
 
