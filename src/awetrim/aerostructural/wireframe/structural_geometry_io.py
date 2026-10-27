@@ -19,7 +19,7 @@
 import numpy as np
 import logging
 
-from ..utils import calculate_cg, calculate_inertia
+from ..utils import bridle_connection_rest_lengths, calculate_cg, calculate_inertia
 from awetrim.utils.system_config import get_kite
 
 
@@ -330,14 +330,17 @@ def initialize_bridle_line_system(
     pulley_line_indices = []
     pulley_line_to_other_node_pair_dict = {}
     steering_tape_indices = []
-    for _, conn_data in enumerate(struc_geometry["bridle_connections"]["data"]):
+    # Per-connection rest lengths of an actuated snapshot override the
+    # line's (steering tapes share one bridle_lines row).
+    connection_l0 = bridle_connection_rest_lengths(struc_geometry)
+    for conn_row, conn_data in enumerate(struc_geometry["bridle_connections"]["data"]):
 
         conn_name = conn_data[0]
         ci = int(conn_data[1])
         cj = int(conn_data[2])
 
         # computing the mass of the bridle line, and adding it 0.5 to each particle using m_arr
-        l0 = bridle_lines_dict[conn_name]["l0"]
+        l0 = connection_l0.get(conn_row, bridle_lines_dict[conn_name]["l0"])
         material = bridle_lines_dict[conn_name]["material"]
         cross_sectional_area = np.pi * (bridle_lines_dict[conn_name]["d"] / 2) ** 2
         m_line = struc_geometry[material]["density"] * cross_sectional_area * l0
