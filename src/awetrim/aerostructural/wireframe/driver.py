@@ -334,6 +334,43 @@ class PreparedWireframe:
         k[len(k) - n_bridle:] *= float(factor)
         structural_wireframe.set_stiffnesses(self.psystem, k)
 
+    def restore(self, sim_output_path) -> None:
+        """Put the structure back where a saved solve ended: its final node
+        positions, rest lengths and the stiffnesses it ran with.
+
+        The structure IS the wireframe's whole state (a minimum-energy solve
+        carries no velocity), so a continuation resumes from a saved step as
+        it would have gone on. Unlike ``starting_from_sim_subdir``, the built
+        rest lengths in ``reader["l0"]`` are kept: they are the reference the
+        steering half-difference is measured from.
+        """
+        metadata, tracking = load_sim_output(sim_output_path)
+        # Older files lack structure_positions; their positions[-1] carries the
+        # final trim rotation (2 cm at the LEI-V3 tips), so a chain resumed
+        # from one starts off the uninterrupted one. It converges to the same
+        # state (1e-6 deg AoA), but not bit-identically as it does from
+        # structure_positions.
+        positions = np.asarray(
+            metadata.get("structure_positions", np.asarray(tracking["positions"])[-1]),
+            dtype=float,
+        )
+        rest_lengths = np.asarray(metadata["rest_lengths"], dtype=float)
+        current = np.asarray(structural_wireframe.get_rest_lengths(self.psystem), dtype=float)
+        if positions.shape != self.psystem.positions.shape or rest_lengths.shape != current.shape:
+            raise ValueError(
+                f"{sim_output_path} does not fit this structure: positions "
+                f"{positions.shape} vs {self.psystem.positions.shape}, rest lengths "
+                f"{rest_lengths.shape} vs {current.shape}"
+            )
+        for particle, position in zip(self.psystem.particles, positions):
+            particle.update_pos(position)
+        for index in np.flatnonzero(rest_lengths != current):
+            self.psystem.update_rest_length(int(index), rest_lengths[index] - current[index])
+        if "final_stiffnesses" in metadata:
+            structural_wireframe.set_stiffnesses(
+                self.psystem, np.asarray(metadata["final_stiffnesses"], dtype=float)
+            )
+
 
 def build_case(
     config: dict | None = None,

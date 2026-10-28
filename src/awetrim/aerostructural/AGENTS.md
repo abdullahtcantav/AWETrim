@@ -146,7 +146,15 @@ src/awetrim/aerostructural/
                                    files, VSM body, tether) + prepare_structure
                                    (one live wireframe; PreparedWireframe reads
                                    the LIVE tape lengths, pin_bridle_modulus
-                                   sets the fixed-stiffness model) + solve_step
+                                   sets the fixed-stiffness model, restore(h5)
+                                   puts back a saved solve's positions (meta
+                                   structure_positions: the structure's own;
+                                   tracking positions[-1] carries the final
+                                   trim rotation it never receives), rest
+                                   lengths and stiffnesses, keeping the built
+                                   l0 as the steering reference: a chain
+                                   resumes mid-way. Billow cannot: its beam
+                                   frames are not in sim_output.h5) + solve_step
                                    (one coupled_solver_qsm solve from wherever
                                    the structure stands; final_state= receives
                                    the trimmed body, trim result and system

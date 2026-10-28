@@ -2348,6 +2348,11 @@ def main(
         "trim_results": _trim_results_summary(results_aero),
         "tether_force": float(tether_force),
         "rest_lengths": rest_lengths,
+        # The structure's own node positions at exit: what the next solve on
+        # the same structure starts from. NOT tracking positions[-1], which is
+        # that shape after the final trim rotation (a fraction of a degree, a
+        # few cm at the tips) -- the structure never receives it.
+        "structure_positions": np.asarray(psystem.positions, dtype=float).copy(),
         # --- solver state, for a continuation to pick up where this left off --
         # None of this is model state, and none of it can be reconstructed from
         # the snapshot: it is what the coupled loop LEARNED about its own
