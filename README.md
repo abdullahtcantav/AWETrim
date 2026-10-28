@@ -9,7 +9,7 @@
 
 AWETrim is a Python library that takes a soft kite for Airborne Wind Energy from its design to optimised flight trajectories. The workflow:
 
-1. **Design**: describe the kite (geometry, structure, masses, tether, winch) in one folder.
+1. **Aerodynamics**: describe the kite (geometry, structure, masses, tether, winch) in one folder, then trim the rigid wing with VSM and check its static stability.
 2. **Aerostructural deformation**: couple a vortex aerodynamic method ([VSM](https://github.com/awegroup/Vortex-Step-Method)) with a minimum-energy structural solver ([Billow](https://github.com/awegroup/Billow)) to get the deformed shape the kite flies in.
 3. **ROM identification**: reduce those simulations to a fast quasi-steady reduced-order model (ROM).
 4. **Trajectory optimisation**: simulate and optimise reel-out patterns and whole pumping cycles with the ROM, in a CasADi-based system model.
@@ -51,7 +51,7 @@ All examples run from the **project root** and use the reference **TU Delft LEI-
 
 ```bash
 # One VSM quasi-steady trim state
-python examples/1_design/solve_single_state.py
+python examples/1_aerodynamics/solve_single_state.py
 
 # One coupled VSM ↔ structure deformed-shape simulation (wireframe fidelity)
 python examples/2_aerostructural/run_simulation_PSM.py
@@ -64,7 +64,7 @@ python examples/4_trajectory_optimization/cycle/fit_periodic_cycle_config.py --k
 python examples/4_trajectory_optimization/cycle/run_full_cycle_opti.py --kite LEI-V3-KITE
 ```
 
-[`examples/`](examples/README.md) has one folder per workflow step, `1_design/` to `5_flight_data/`, each with its own README.
+[`examples/`](examples/README.md) has one folder per workflow step, `1_aerodynamics/` to `5_flight_data/`, each with its own README.
 
 ---
 

@@ -49,7 +49,7 @@ Each run writes its own case folder, named after its inputs, under
 - `sim_output.h5`: node positions, forces and the solver history
 - `case.json`: what to draw (wing, tubes, bridle lines with names and tensions) and the flight state
 - `config.yaml`, plus the deformed `aero_geometry.yaml` / `struc_geometry.yaml`, which other
-  scripts can reuse (e.g. `examples/1_design/solve_single_state.py --deformed-from <case>`)
+  scripts can reuse (e.g. `examples/1_aerodynamics/solve_single_state.py --deformed-from <case>`)
 
 Solver settings (tolerances, panel counts, the material model) come from the
 kite's `as_config.yaml`.

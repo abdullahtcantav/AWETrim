@@ -369,7 +369,7 @@ Scripts
 
  - Scripts live in `examples/` and are executed from the project root, for example:
    - python examples/2_aerostructural/run_simulation_PSM.py
-   - python examples/1_design/solve_single_state.py
+   - python examples/1_aerodynamics/solve_single_state.py
    - python run_analysis_ekf.py   (available on request)
 
 External dependencies referenced by `pyproject.toml` (VCS installs):

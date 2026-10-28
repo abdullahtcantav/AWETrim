@@ -571,7 +571,7 @@ Primitives kept here for AWEDesign (and general use):
   F_gravity/F_transport/F_centripetal; M_aero_B/M_gravity_B/M_transport_B/
   M_gyro_B — the tether has no moment about B), consumed by the pivot-B
   static sweeps. Consumers:
-  `examples/1_design/compute_stability_derivatives.py` and the
+  `examples/1_aerodynamics/compute_stability_derivatives.py` and the
   wes-quasi-steady static pipeline.
 
   `linearise_cg_eom(stability)` linearises the CG form over `CG_STATE_NAMES`
@@ -777,7 +777,7 @@ Public functions should use these names:
 
 ## Stability Script Configuration
 
-`examples/1_design/compute_stability_derivatives.py` is the STATIC
+`examples/1_aerodynamics/compute_stability_derivatives.py` is the STATIC
 stability driver: trim → `compute_vsm_trim_stability_derivatives` (always
 course-frame `DEFAULT_AXES`, always `course_rate_state=True`) →
 `static_slopes_summary` verdict table + `J_full`/`J_course_rate` diagnostics
