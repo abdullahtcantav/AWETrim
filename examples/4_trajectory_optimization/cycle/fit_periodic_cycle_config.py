@@ -943,6 +943,12 @@ def build_config(
                 # set). Seeds sit at >= 0.28, converged optima at >= 0.47; the
                 # artefact that broke the 8 m/s cycles collapses it to < 0.01.
                 "parametric_speed_floor": PARAMETRIC_SPEED_FLOOR,
+                # One closed period: the seam interval (last node -> node 0)
+                # gets the continuity, rate and AoA rows and its energy and
+                # time, and closes the cycle (run_full_cycle_opti then drops
+                # the one-sided close_radial_cycle pin, which left the last
+                # node unconstrained and the seam uncounted).
+                "periodic_wrap": True,
             },
         }
     }

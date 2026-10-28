@@ -153,6 +153,11 @@ STAGES = [
         "params": ["C_phi", "C_beta", "r0"],
         "target": "zero",
         "fix_depower": True,
+        # The one-sided radius pin, not the seam closure: a seed open by tens
+        # of metres ends with steering and reel speed far from node 0, and
+        # closing it while also holding the seam's rate rows was locally
+        # infeasible at 12 m/s at 100 m. The later stages close the seam.
+        "periodic": False,
         "closure_weight": 0.0,
         "hard_close": True,
         "warm_start": False,
@@ -434,12 +439,19 @@ def _downsample_n_points(reelout_config, n_points):
     print(f"Downsampled cycle to n_points={int(n_points)}")
 
 
-def _closure_residual(result):
-    """|r[-1] - r[0]| (m) from the optimizer's own trajectory, or None."""
+def _closure_residual(result, periodic=False):
+    """Radial closure (m) from the optimizer's own trajectory, or None.
+
+    ``periodic`` (periodic_wrap): the seam interval's continuity residual
+    |r[N-1] + v_r[N-1] dt_seam - r[0]|; otherwise |r[-1] - r[0]|.
+    """
     traj = getattr(result, "optimized_trajectory", {}) or {}
     r = traj.get("distance_radial")
     if r is None or len(r) < 2:
         return None
+    if periodic and {"s", "s_dot", "speed_radial"} <= set(traj):
+        dt = (1.0 - float(traj["s"][-1])) / max(float(traj["s_dot"][-1]), 1e-9)
+        return float(abs(r[-1] + float(traj["speed_radial"][-1]) * dt - r[0]))
     return float(abs(r[-1] - r[0]))
 
 
@@ -545,6 +557,7 @@ def main(
     run_tag: str = "",
     skip_validation: bool = False,
     stage_repeats: int = None,
+    step_scale: float = None,
     wind_speed: float = None,
     wind_height: float = None,
 ) -> int:
@@ -562,6 +575,15 @@ def main(
         # Re-centred passes of the main stage (the old sequential scheme):
         # the remedy when a run ends with the backstop step box active.
         STAGES[1]["repeat"] = int(stage_repeats)
+    if step_scale:
+        # Every stage's backstop box scaled by one factor (a study knob; 1 =
+        # the boxes above).
+        for stage in STAGES:
+            stage["step_bounds"] = {
+                k: float(v) * float(step_scale)
+                for k, v in (stage.get("step_bounds") or {}).items()
+            }
+        print(f"Step boxes scaled x{float(step_scale):g}")
     reelout_config = load_reelout_config(config_path or CYCLE_CONFIG_PATH)
     if skip_validation:
         # Continuation from an OPTIMIZED config (a previous run's output): its
@@ -609,6 +631,7 @@ def main(
     print(baseline_phase.energy_metrics())
 
     if optimize:
+        seed_wrap = bool(sim.get("periodic_wrap", False))
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         tag = wind_tag() + (f"_{run_tag}" if run_tag else "")
         seed_signature = _pattern_signature(reelout_config["path_parameters"])
@@ -623,7 +646,15 @@ def main(
             # warm-starts from the previous one: run_simulation_opti writes the
             # optimized shape/winch back into the config and advances start_state.
             sim["radial_closure_weight"] = float(stage["closure_weight"])
-            sim["close_radial_cycle"] = bool(stage["hard_close"])
+            # A periodic_wrap seed closes the cycle through the seam interval
+            # (last node -> node 0, with its continuity, rates, AoA, energy
+            # and time); the one-sided radius pin would leave the last node
+            # unconstrained and the seam uncounted, and the two exclude each
+            # other. A stage may ask for the pin instead ("periodic": False);
+            # older seeds without the wrap keep the pin throughout.
+            wrap = seed_wrap and bool(stage.get("periodic", True))
+            sim["periodic_wrap"] = wrap
+            sim["close_radial_cycle"] = bool(stage["hard_close"]) and not wrap
             sim["fix_depower_profile"] = bool(stage.get("fix_depower", False))
             step_bounds = stage.get("step_bounds") or {}
             target = stage.get("target", "power")
@@ -667,9 +698,9 @@ def main(
                     aborted = True
                     break
                 result = stage_result
-                res = _closure_residual(result)
+                res = _closure_residual(result, bool(sim.get("periodic_wrap", False)))
                 print(
-                    f"Stage {i + 1}{rep_tag} done. closure |r[-1]-r[0]| = "
+                    f"Stage {i + 1}{rep_tag} done. radial closure = "
                     f"{'n/a' if res is None else f'{res:.2f} m'}"
                 )
                 signature = _pattern_signature(cycle.pattern_config["path_parameters"])
@@ -775,6 +806,13 @@ if __name__ == "__main__":
         "the previous run ended with the backstop step box active",
     )
     parser.add_argument(
+        "--step-scale",
+        type=float,
+        default=None,
+        help="Scale every stage's backstop step box (C_phi, C_beta, r0) by this "
+        "factor (default 1)",
+    )
+    parser.add_argument(
         "--wind-speed",
         type=float,
         default=None,
@@ -796,6 +834,7 @@ if __name__ == "__main__":
         run_tag=args.tag,
         skip_validation=args.continue_from is not None,
         stage_repeats=args.stage_repeats,
+        step_scale=args.step_scale,
         wind_speed=args.wind_speed,
         wind_height=args.wind_height,
     )
