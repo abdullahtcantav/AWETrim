@@ -58,7 +58,7 @@ result vocabulary plus `casadi_trim` diagnostics and the exact Jacobian
 (`jacobian`, `jacobian_layout`) for the stability work. LEI-V3, 27 panels:
 tetherless 0.08 s vs 5.5 s production (1.1 s with the casadi_newton inner
 loop), Williams 0.12 s vs 2.6 s; build 0.3 s once.
-`scripts/aerodynamics/compare_trim_solvers.py` is the comparison.
+`compare_trim_solvers.py` (available on request) is the comparison.
 
 Three things it made visible, all now pinned by
 `tests/aerodynamics/test_trim_casadi.py` / `test_panel_kernels.py`:
@@ -318,7 +318,7 @@ Primitives kept here for AWEDesign (and general use):
   9-state fast subsystem, assembled directly from the governing equations
   (independent of `A_full`): `f(0)` is the trim equilibrium residual and
   central-differencing `f` cross-checks `A_full`.
-  Used by `scripts/personal/wes-quasi-steady/verify_linearization.py`.
+  Used by `verify_linearization.py` (available on request).
 - `vsm_quasi_steady.corotating_state_transform` — constant unipotent map `T`
   from the linearisation's native FROZEN stability axes to the co-rotating
   course axes (course axes at trim, carried by the body about B — the paper's
@@ -353,8 +353,8 @@ Primitives kept here for AWEDesign (and general use):
   `eps_position_lateral_used`, and the independent verification field
   `nonlinear_rhs_aug` / `nonlinear_rhs_aug_full` (12-state analogue of
   `nonlinear_rhs`, cross-checked by
-  `scripts/personal/wes-quasi-steady/verify_linearization.py
-  --position-states`). Consumers: `stability_common.linearise_trim`
+  `verify_linearization.py
+  --position-states` (available on request)). Consumers: `stability_common.linearise_trim`
   (`position_states=True` forwarded; adds `is_lat_aug`,
   `participation_aug`, `alpha_lon_aug`, `alpha_lat_aug`) and
   `run_modal_stability.py` (`--position-states`, default on: 10-vs-12
@@ -522,8 +522,8 @@ Primitives kept here for AWEDesign (and general use):
   `timeder_angle_course` sign convention as the course-rate block (see the
   sign note there — do not mix with `delta_chi = dv/u0`). A coordinated turn
   perturbation composes it with `omega_perturb = -delta_course_rate *
-  e_radial`. Consumer: `scripts/personal/wes-quasi-steady/
-  run_static_stability.py` (six-channel static-stability sweeps).
+  e_radial`. Consumer: `wes-quasi-steady/
+  run_static_stability.py` (available on request) (six-channel static-stability sweeps).
 
   `static_slopes_summary(stability)` — the cheap static-stability verdict
   (~20 warm VSM solves via `linearise_cg_eom`, no sweeps): six tangent
@@ -565,13 +565,13 @@ Primitives kept here for AWEDesign (and general use):
   aerodynamic neutral point / static margin; net inputs add the transport
   response to the tilted kite velocity (gravity/gyro arms do not respond
   to aoa at frozen attitude). The kite margin is the B one — consumer:
-  `scripts/personal/wes-quasi-steady/run_static_stability.py`.
+  `run_static_stability.py` (available on request).
   `eval_force_moment(..., with_contributions=True)` appends a 4th return
   element: the per-contributor B-point breakdown (F_aero/F_tether/
   F_gravity/F_transport/F_centripetal; M_aero_B/M_gravity_B/M_transport_B/
   M_gyro_B — the tether has no moment about B), consumed by the pivot-B
   static sweeps. Consumers:
-  `scripts/aerodynamics/compute_stability_derivatives.py` and the
+  `examples/1_aerodynamics/compute_stability_derivatives.py` and the
   wes-quasi-steady static pipeline.
 
   `linearise_cg_eom(stability)` linearises the CG form over `CG_STATE_NAMES`
@@ -612,7 +612,7 @@ Keep the top-level public import path stable through `vsm_quasi_steady.py`.
 ## Public Script Layout
 
 ```text
-scripts/aerodynamics/vsm_quasi_steady/
+vsm_quasi_steady/ (available on request)
   solve_single_state.py
   run_sweep.py
   profile_single_state.py
@@ -622,21 +622,21 @@ scripts/aerodynamics/vsm_quasi_steady/
 Case-specific scripts may live one level deeper, for example:
 
 ```text
-scripts/aerodynamics/vsm_quasi_steady/tudelft_v3/
+tudelft_v3/ (available on request)
 ```
 
 Parametric shape scripts (built on `parametric_geometry.py` for 3D planforms and
 `parametric_airfoil.py` for 2D sections) live in:
 
 ```text
-scripts/aerodynamics/parametric_shapes/
+parametric_shapes/ (available on request)
   generate_shape_variations.py
   optimize_lei_airfoil.py
 ```
 
 The swept-AWES design-tool scripts (`preview_geometry`, `place_wing`,
 `design_single_case`, `design_swept_awes`, `analyze_wing`, `sweep_design`) moved
-with the design layer to the **AWEDesign** repo (`scripts/` there). They build on
+with the design layer to the **AWEDesign** repo (`examples/` there). They build on
 `build_swept_wing` + `turn_radius_vs_steer_moment` from here plus `awedesign`'s
 own `design_stats` / `weight_model`.
 
@@ -702,7 +702,7 @@ Public functions should use these names:
   drag + half-weight, no ground closure; matches the ROM cycle model but
   overestimates tether drag). Both also take `gamma_loop` (default `"base"`),
   forwarded to
-  `_default_vsm_solver` → VSM `Solver(gamma_loop_type=...)`. `"anderson"` selects
+  `default_vsm_solver` → VSM `Solver(gamma_loop_type=...)`. `"anderson"` selects
   the Anderson-accelerated inner loop (~25× fewer inner iterations in attached
   flow), but **only use it with a tight `gamma_tolerance` (~1e-8)**: these trim
   solvers use a finite-difference outer Jacobian, and Anderson's superlinear
@@ -728,16 +728,22 @@ Public functions should use these names:
   loop carries a corner-averaged Jacobian and gate-aware step control -- a
   few deep-stall states seeded from a different sideslip still take the base
   fallback (3/64 warm-chained at 26 deg). Not the default anywhere yet;
-  `scripts/aerodynamics/compare_gamma_loops_polar.py` is the bake-off.
+  `compare_gamma_loops_polar.py` (available on request) is the bake-off.
   Both trim solvers additionally take `is_with_artificial_viscosity`
   (default `False`) and `artificial_viscosity_factor` (default `0.035`),
-  forwarded to `_default_vsm_solver` → VSM `Solver`: the parameter-free
+  forwarded to `default_vsm_solver` → VSM `Solver`: the parameter-free
   Li/Gaunaa spanwise artificial viscosity that stabilises the gamma loop
   around stall (same option the aerostructural side exposes via as_config
   `aerodynamic.is_with_artificial_viscosity`). Enable it for trims within
   ~1 deg of the stall margin, where the base loop can oscillate without
   converging and the unconverged gamma corrupts the outer trim residuals.
   Ignored when an explicit `solver` is passed.
+  `default_vsm_solver` (public since 2026-10-28; `_default_vsm_solver` is an
+  alias) is THE place AWETrim's VSM settings live (zero gamma seed, `base`
+  loop at 1e-6, AV off, `is_aoa_corrected=False`), stated rather than
+  inherited because VSM's defaults change between versions. Scripts that
+  solve VSM outside a trim (e.g. `examples/1_aerodynamics/compute_polars.py`)
+  build their solver with it so they share the trims' force law.
   **Attached-first VSM solve (2026-09-01, OPT-IN via `AV_ATTACHED_FIRST`, off by default -- it did not hold the attached family and cost 3.6x):** every VSM evaluation inside both trim solvers goes through `solve_vsm_attached_first`; when enabled: AV OFF first (seeded, capped at `ATTACHED_FIRST_MAX_ITERATIONS`); if it converges with every panel below its stall onset that IS the AV solution (AV is a no-op below the onset) and is returned with `av_stage = "attached"`; otherwise the AV solve runs seeded from that iterate (`av_stage = "stalled"`). This makes the solver land on the attached family whenever one exists instead of whichever family the seed was nearest to (the two-branched AV circulation made depower continuations alternate every row). The trim result carries `av_stage`. Both trim result dicts carry `stalled_fraction` (span-weighted share of the wing past its 2-D stall onset), `stalled_area_fraction`, `n_stalled_panels` / `n_panels` and `stall_margin_min_deg` (`stall_fraction_fields`, onset = first interior Cl peak of each panel polar, the VSM's own AV gate; added 2026-09-01). Both trim solvers take `gamma_seed` (optional, one circulation value per
   panel; the tetherless solver since 2026-08-31 — before that it silently
   lacked the parameter and callers cold-started): an initial guess passed to
@@ -777,7 +783,7 @@ Public functions should use these names:
 
 ## Stability Script Configuration
 
-`scripts/aerodynamics/compute_stability_derivatives.py` is the STATIC
+`examples/1_aerodynamics/compute_stability_derivatives.py` is the STATIC
 stability driver: trim → `compute_vsm_trim_stability_derivatives` (always
 course-frame `DEFAULT_AXES`, always `course_rate_state=True`) →
 `static_slopes_summary` verdict table + `J_full`/`J_course_rate` diagnostics

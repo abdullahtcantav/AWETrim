@@ -2,7 +2,7 @@
 
 Kite paths, config defaults, the actuation case-folder name, the initial
 geometry rotation and the SystemModel the coupled trim runs on. Lived in
-``scripts/aerostructural/common.py`` until 2026-10-07; that file now only
+``examples/2_aerostructural/common.py`` until 2026-10-07; that file now only
 re-exports this module so existing scripts keep importing ``common``.
 """
 

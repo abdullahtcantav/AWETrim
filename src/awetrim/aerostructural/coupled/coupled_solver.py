@@ -692,6 +692,7 @@ def main(
     billow_structure=None,
     canopy_sections=None,
     strut_sections=None,
+    final_state=None,
 ):
     """
     Runs the aero-structural solver for the given input parameters.
@@ -710,6 +711,12 @@ def main(
             converged state once the depower walk has arrived, and each
             followed by ``steering_settle_iterations_after_update`` iterations
             in which no convergence exit is allowed.
+        final_state (dict or None): When given, filled with the objects of
+            the FINAL trim that ``meta`` cannot store: ``body_aero`` (the VSM
+            body at the trimmed attitude, with the trim's inflow set) and
+            ``results_aero`` (the full trim result). Re-solving that body
+            reproduces the trim's aerodynamic force, which is what a
+            frozen-shape evaluation of the converged state needs.
 
     Returns:
         tracking_data (dict): Dictionary containing time histories of positions, forces, etc.
@@ -1552,5 +1559,7 @@ def main(
             dtype=np.int32,
         ),
     }
+    if final_state is not None:
+        final_state.update(body_aero=body_aero, results_aero=results_aero)
 
     return tracking_data, meta

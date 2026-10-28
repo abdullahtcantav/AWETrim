@@ -1,5 +1,5 @@
 # Full-cycle optimisation profile of the LEI-V3, read by
-# scripts/reduced-order-model/optimization/cycle/cycle_kites.py (--kite).
+# examples/4_trajectory_optimization/cycle/cycle_kites.py (--kite).
 #
 # Hardware (mass, tether, drum envelope, KCU ranges) is in system.yaml; the
 # ROM and its depower band (controls.input_depower) are in rom_config.yaml.
@@ -58,7 +58,7 @@ flight:
   year: "2019"
   month: "10"
   day: "08"
-  kite_model: LEI-V3-Kite
+  kite_model: LEI-V3 Kite
   cycle_id: 62
 
 # Optional:

@@ -1009,6 +1009,129 @@ def run_frozen_geometry_alpha_sweep(
     return rows
 
 
+def body_centre_panel_axes(body_aero) -> np.ndarray:
+    """FRD centre-panel body axes of a VSM body, as it stands.
+
+    Rows ``[x_K, y_K, z_K]`` in the body's (VSM/structural) frame, the
+    construction of
+    :func:`awetrim.identification.rigid_body_axes.compute_centre_panel_axes`
+    applied to the body's own panel corners, so they follow whatever attitude
+    and deformation the body has (a trimmed body included).
+    """
+    from awetrim.identification.rigid_body_axes import compute_centre_panel_axes
+
+    panels = body_aero.panels
+    le = [p.LE_point_1 for p in panels] + [panels[-1].LE_point_2]
+    te = [p.TE_point_1 for p in panels] + [panels[-1].TE_point_2]
+    nodes = np.vstack([np.asarray(le, dtype=float), np.asarray(te, dtype=float)])
+    n = len(le)
+    return compute_centre_panel_axes(nodes, np.arange(n), np.arange(n, 2 * n)).axes
+
+
+def run_frozen_alpha_polar_about_trim(
+    body_aero,
+    solver,
+    d_alpha_deg,
+    *,
+    body_axes: np.ndarray | None = None,
+) -> list[dict]:
+    """Angle-of-attack polar of a TRIMMED body on its frozen shape.
+
+    ``body_aero`` is the body a trim returned (``coupled_solver.main``'s
+    ``final_state["body_aero"]``): trimmed attitude, deformed shape and the
+    trim's inflow -- freestream ``va`` plus the rotational inflow ``omega x
+    (r - r0)`` of the course frame -- already set. For each ``d_alpha_deg``
+    the freestream is turned in the FRD centre-panel body axes so that its
+    angle of attack changes by exactly that much at fixed ``|va|`` and side
+    slip, the rotational inflow is kept, and the circulation is solved on the
+    unchanged geometry (no re-trim). ``d_alpha = 0`` therefore re-solves the
+    trim's own aerodynamics: compare its force with the trim's
+    ``total_aero_force_vec`` to check the polar is about the right state.
+
+    The solves march outward from ``d_alpha = 0`` in both directions, each
+    seeded with its neighbour's circulation, and land on the attached solution
+    whenever one exists (``solve_vsm_attached_first``, as the trims do).
+
+    Args:
+        body_aero: the trimmed VSM body (not modified; a copy is solved).
+        solver: VSM ``Solver``.
+        d_alpha_deg: angle-of-attack increments [deg]; 0 is added if absent.
+        body_axes: FRD rows in the body's frame; default
+            :func:`body_centre_panel_axes` of ``body_aero``.
+
+    Returns:
+        One dict per increment, sorted by it: ``d_alpha_deg``,
+        ``alpha_body_deg`` (FRD angle of attack of the freestream),
+        ``va_world`` and ``force_world`` (VSM wing force, bridle-line drag
+        included when the body carries the bridle) as 3-vectors in the body's
+        frame, ``gamma_converged`` and ``av_stage``. A failed solve gives NaN
+        forces and ``gamma_converged`` False instead of raising.
+    """
+    import inspect
+
+    from awetrim.aerodynamics.apparent_wind import inflow_state_of
+    from awetrim.aerodynamics.vsm_quasi_steady import solve_vsm_attached_first
+
+    va0, omega, r0 = inflow_state_of(body_aero)
+    if va0 is None:
+        raise ValueError("body_aero carries no single freestream va to rotate.")
+    axes = body_centre_panel_axes(body_aero) if body_axes is None else np.asarray(body_axes)
+    v_body = axes @ (-va0)  # air-relative kite velocity, FRD
+    speed = float(np.linalg.norm(v_body))
+    alpha0 = float(np.arctan2(v_body[2], v_body[0]))
+    beta0 = float(np.arcsin(np.clip(v_body[1] / speed, -1.0, 1.0)))
+    rate = float(np.linalg.norm(omega))
+    axis = omega / rate if rate > 1e-12 else np.array([0.0, 0.0, -1.0])
+    try:
+        accepts_seed = "gamma_distribution" in inspect.signature(solver.solve).parameters
+    except (TypeError, ValueError):
+        accepts_seed = False
+
+    steps = np.asarray(d_alpha_deg, dtype=float).ravel()
+    if not np.any(steps == 0.0):
+        steps = np.append(steps, 0.0)
+    steps = np.unique(steps)
+    body = copy.deepcopy(body_aero)
+
+    def solve_at(d_alpha, seed):
+        alpha = alpha0 + np.deg2rad(d_alpha)
+        v_new = speed * np.array(
+            [np.cos(alpha) * np.cos(beta0), np.sin(beta0), np.sin(alpha) * np.cos(beta0)]
+        )
+        va = -(axes.T @ v_new)
+        try:
+            type(body).va.fset(
+                body, va, body_rates=rate, body_axis=axis,
+                reference_point=r0, rates_in_body_frame=True,
+            )
+            res = solve_vsm_attached_first(solver, body, seed, accepts_seed=accepts_seed)
+            force = np.array([res["Fx"], res["Fy"], res["Fz"]], dtype=float)
+            converged = bool(res.get("gamma_converged", True))
+            gamma = res.get("gamma_distribution")
+            stage = res.get("av_stage")
+        except Exception:
+            logging.exception("Frozen polar: VSM solve failed at d_alpha=%.2f deg.", d_alpha)
+            force, converged, gamma, stage = np.full(3, np.nan), False, None, None
+        row = {
+            "d_alpha_deg": float(d_alpha),
+            "alpha_body_deg": float(np.rad2deg(alpha)),
+            "va_world": va,
+            "force_world": force,
+            "gamma_converged": converged,
+            "av_stage": stage,
+        }
+        return row, (gamma if converged else seed)
+
+    rows = {}
+    centre, centre_gamma = solve_at(0.0, None)
+    rows[0.0] = centre
+    for branch in (steps[steps > 0.0], steps[steps < 0.0][::-1]):
+        seed = centre_gamma
+        for d_alpha in branch:
+            rows[float(d_alpha)], seed = solve_at(float(d_alpha), seed)
+    return [rows[float(d)] for d in steps]
+
+
 def plot_aero_forces_with_frames(
     struc_nodes: np.ndarray,
     kite_connectivity_arr,

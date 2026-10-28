@@ -59,12 +59,12 @@ DEPOWER_M = 0.2
 
 
 def _load_scripts_common():
-    """Import scripts/aerostructural/common.py under a unique name (no path clash).
+    """Import examples/2_aerostructural/common.py under a unique name (no path clash).
 
     The integration test deliberately uses the real build_system_model so it
     covers the KCU mass split (mass_kcu = m_arr[0], mass_wing = sum(m_arr[1:])).
     """
-    path = REPO_ROOT / "scripts" / "aerostructural" / "common.py"
+    path = REPO_ROOT / "examples" / "2_aerostructural" / "common.py"
     spec = importlib.util.spec_from_file_location("aerostructural_scripts_common", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

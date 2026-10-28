@@ -167,7 +167,7 @@ structural_pss:
   # bridle stretching several percent is not the kite that was measured, and
   # the stretch moves the trim. It costs about the baseline wall time
   # (~166 s/point vs 164 s across u_dp 0.18-0.42).
-  # See scripts/personal/wes-quasi-steady/FINDINGS_bridle_stiffness.md.
+  # See FINDINGS_bridle_stiffness.md. (available on request)
   update_stiffness: !!bool true
   stiffness_update_scope: !!str 'all'    # 'wing' | 'bridle' | 'all'
   max_elongation: !!float 0.01           # the 1% gate
