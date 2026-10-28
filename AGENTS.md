@@ -137,6 +137,10 @@ src/awetrim/
                          (init/step; echoed) -> opti_limits_override C_phi/
                          C_beta (B-spline hull) + sim_parameters.
                          min_azimuth_amplitude (one smooth row in opti_phase).
+                         Optional angle_of_attack_limits {min, max,
+                         stall_margin} [deg] (init/step; echoed) ->
+                         opti_limits_override angle_of_attack; stall_margin
+                         = the ROM's angle_of_attack_stall minus it.
                          Launcher: scripts/server/run_reelout_server.py
   experimental/      ✅  EKF flight-data analysis pipeline (+ data_preprocessors/)
   plotting/          ✅  shared plotting helpers — see src/awetrim/plotting/AGENTS.md

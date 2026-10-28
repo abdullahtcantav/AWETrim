@@ -208,6 +208,47 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
 components:
   schemas:
+    AngleOfAttackLimits:
+      properties:
+        min:
+          anyOf:
+          - type: number
+            exclusiveMaximum: 90.0
+            exclusiveMinimum: -90.0
+          - type: 'null'
+          title: Min
+          description: alpha stays >= this [deg] at every node
+        max:
+          anyOf:
+          - type: number
+            exclusiveMaximum: 90.0
+            exclusiveMinimum: -90.0
+          - type: 'null'
+          title: Max
+          description: alpha stays <= this [deg] at every node
+        stall_margin:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Stall Margin
+          description: alpha stays this far [deg] below the ROM's stall angle at every node;
+            replaces ``max`` (send one of the two). Needs a ROM that states angle_of_attack_stall.
+      additionalProperties: false
+      type: object
+      title: AngleOfAttackLimits
+      description: |-
+        Optional bounds on the kite's angle of attack, in DEGREES.
+
+        The angle is the ROM's own (``aerodynamics`` of the ROM file in use), so
+        a ROM that measures it from another reference chord trims at other values
+        for the same lift: the default box (0 <= alpha <= 14 deg) can then cut off
+        states the kite flies, e.g. the depowered ones of a ROM that trims below
+        0 deg there. ``stall_margin`` keeps alpha that far below the ROM's stall
+        angle (``aerodynamics.params.angle_of_attack_stall``) instead of a fixed
+        ceiling. Every field is optional; an omitted side keeps the default. On
+        /step the struct replaces the session's limits as a whole (send ``{}`` to
+        return to the defaults).
     DepowerReply:
       properties:
         mode:
@@ -413,6 +454,11 @@ components:
           - $ref: '#/components/schemas/PatternLimits'
           - type: 'null'
           description: Pattern limits in force [deg] (null = optimizer defaults)
+        angle_of_attack_limits:
+          anyOf:
+          - $ref: '#/components/schemas/AngleOfAttackLimits'
+          - type: 'null'
+          description: Angle-of-attack limits in force [deg] (null = the default box)
         state:
           type: string
           title: State
@@ -556,6 +602,12 @@ components:
           description: Optional box on the path's azimuth/elevation range and an azimuth-amplitude
             floor, in degrees; omitted = the optimizer's defaults (plus whatever the cycle
             config sets).
+        angle_of_attack_limits:
+          anyOf:
+          - $ref: '#/components/schemas/AngleOfAttackLimits'
+          - type: 'null'
+          description: Optional bounds on the angle of attack [deg], or a margin below the
+            ROM's stall angle; omitted = the default box 0-14 deg.
       additionalProperties: false
       type: object
       required:
@@ -878,6 +930,12 @@ components:
           - type: 'null'
           description: Pattern limits the path was optimized under [deg] (null = optimizer
             defaults)
+        angle_of_attack_limits:
+          anyOf:
+          - $ref: '#/components/schemas/AngleOfAttackLimits'
+          - type: 'null'
+          description: Angle-of-attack limits the path was optimized under [deg] (null = the
+            default box)
         state:
           type: string
           title: State
@@ -946,6 +1004,12 @@ components:
           - type: 'null'
           description: Updated pattern limits for this and later steps; omit to keep the current
             ones, send {} to clear them
+        angle_of_attack_limits:
+          anyOf:
+          - $ref: '#/components/schemas/AngleOfAttackLimits'
+          - type: 'null'
+          description: Updated angle-of-attack limits for this and later steps; omit to keep
+            the current ones, send {} to return to the defaults
         max_iter:
           anyOf:
           - type: integer
