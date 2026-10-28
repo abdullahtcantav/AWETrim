@@ -30,6 +30,7 @@ from scipy.optimize import least_squares
 
 from awetrim.environment.profile_laws import LOG_BASED_MODELS
 from awetrim.aerodynamics.apparent_wind import apparent_wind_at
+from awetrim.aerodynamics.vsm_settings import make_vsm_solver
 from awetrim.aerodynamics.kcu_drag import (
     AXIS_MODEL_NONE,
     AXIS_MODEL_RADIAL,
@@ -90,13 +91,10 @@ def default_vsm_solver(
 ) -> VsmSolver:
     """The VSM ``Solver`` every AWETrim quasi-steady trim uses.
 
-    The settings are AWETrim's, stated here rather than inherited from VSM:
-    VSM's own defaults change between versions (``is_aoa_corrected`` flipped
-    to True on VSM develop on 2026-09-17), and the trims, the CasADi panel
-    kernels and every stored result assume the values below. Build a VSM
-    solver through this function whenever its result is compared with a trim;
-    a bare ``Solver()`` follows whichever VSM checkout is installed. Changing
-    a default here changes every trim.
+    The settings are AWETrim's (:mod:`awetrim.aerodynamics.vsm_settings`),
+    never inherited from VSM, whose own defaults change between versions.
+    Build a VSM solver through this function whenever its result is compared
+    with a trim.
 
     Args:
         reference_point: point the moments are taken about [m].
@@ -105,12 +103,12 @@ def default_vsm_solver(
             "casadi_newton"; see the notes below.
         is_with_artificial_viscosity: Li/Gaunaa spanwise artificial viscosity.
         artificial_viscosity_factor: its factor.
-        anderson_max_iterations: cap of the Anderson attempt (None = VSM's).
+        anderson_max_iterations: cap of the Anderson attempt (None = AWETrim's).
         is_aoa_corrected: force directions from the quarter-chord flow (True)
             instead of the freestream (False, AWETrim's model).
     """
     try:
-        from VSM.core.Solver import Solver
+        from VSM.core.Solver import Solver  # noqa: F401  (availability check)
     except ImportError as exc:  # pragma: no cover - depends on optional package
         raise ImportError(
             "VSM is required when no solver is supplied. Install or expose "
@@ -154,22 +152,17 @@ def default_vsm_solver(
     # by 1000 in 0.3-0.4 s -- ~4x faster than the base loop, same fixed
     # point), and the 1e-8 Picard fallback then costs ~20x the base-1e-6
     # solve. Raise it (~1000) for post-stall anderson work; None keeps the
-    # VSM default.
+    # AWETrim default.
+    # Everything not set here is AWETrim's (awetrim.aerodynamics.vsm_settings).
     kwargs = {}
     if anderson_max_iterations is not None:
         kwargs["anderson_max_iterations"] = int(anderson_max_iterations)
-    return Solver(
+    return make_vsm_solver(
         reference_point=reference_point,
-        gamma_initial_distribution_type="zero",
         allowed_error=allowed_error,
         gamma_loop_type=gamma_loop_type,
         is_with_artificial_viscosity=is_with_artificial_viscosity,
         artificial_viscosity_factor=artificial_viscosity_factor,
-        # Force directions from the freestream (False, the model every
-        # AWETrim result is built on and what the CasADi panel kernels
-        # reproduce) or from the quarter-chord flow (True, VSM develop's own
-        # default since 2026-09-17). Stated rather than inherited, so the
-        # trim never silently follows the VSM checkout.
         is_aoa_corrected=bool(is_aoa_corrected),
         **kwargs,
     )

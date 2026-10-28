@@ -352,6 +352,8 @@ def build_body(args: argparse.Namespace) -> tuple[Any, dict[str, Any]]:
     """
     add_vsm_path(args.vsm_src)
     from VSM.core.BodyAerodynamics import BodyAerodynamics
+
+    from awetrim.aerodynamics.vsm_settings import vsm_body_kwargs
     import tempfile
     import yaml
 
@@ -376,6 +378,7 @@ def build_body(args: argparse.Namespace) -> tuple[Any, dict[str, Any]]:
             bridle_path=(
                 config["struc_geometry_path"] if config["struc_geometry_path"] else None
             ),
+            **vsm_body_kwargs(),
         )
     finally:
         # Clean up temporary file
