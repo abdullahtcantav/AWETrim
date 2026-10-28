@@ -702,7 +702,7 @@ Public functions should use these names:
   drag + half-weight, no ground closure; matches the ROM cycle model but
   overestimates tether drag). Both also take `gamma_loop` (default `"base"`),
   forwarded to
-  `_default_vsm_solver` → VSM `Solver(gamma_loop_type=...)`. `"anderson"` selects
+  `default_vsm_solver` → VSM `Solver(gamma_loop_type=...)`. `"anderson"` selects
   the Anderson-accelerated inner loop (~25× fewer inner iterations in attached
   flow), but **only use it with a tight `gamma_tolerance` (~1e-8)**: these trim
   solvers use a finite-difference outer Jacobian, and Anderson's superlinear
@@ -731,13 +731,19 @@ Public functions should use these names:
   `compare_gamma_loops_polar.py` (available on request) is the bake-off.
   Both trim solvers additionally take `is_with_artificial_viscosity`
   (default `False`) and `artificial_viscosity_factor` (default `0.035`),
-  forwarded to `_default_vsm_solver` → VSM `Solver`: the parameter-free
+  forwarded to `default_vsm_solver` → VSM `Solver`: the parameter-free
   Li/Gaunaa spanwise artificial viscosity that stabilises the gamma loop
   around stall (same option the aerostructural side exposes via as_config
   `aerodynamic.is_with_artificial_viscosity`). Enable it for trims within
   ~1 deg of the stall margin, where the base loop can oscillate without
   converging and the unconverged gamma corrupts the outer trim residuals.
   Ignored when an explicit `solver` is passed.
+  `default_vsm_solver` (public since 2026-10-28; `_default_vsm_solver` is an
+  alias) is THE place AWETrim's VSM settings live (zero gamma seed, `base`
+  loop at 1e-6, AV off, `is_aoa_corrected=False`), stated rather than
+  inherited because VSM's defaults change between versions. Scripts that
+  solve VSM outside a trim (e.g. `examples/1_aerodynamics/compute_polars.py`)
+  build their solver with it so they share the trims' force law.
   **Attached-first VSM solve (2026-09-01, OPT-IN via `AV_ATTACHED_FIRST`, off by default -- it did not hold the attached family and cost 3.6x):** every VSM evaluation inside both trim solvers goes through `solve_vsm_attached_first`; when enabled: AV OFF first (seeded, capped at `ATTACHED_FIRST_MAX_ITERATIONS`); if it converges with every panel below its stall onset that IS the AV solution (AV is a no-op below the onset) and is returned with `av_stage = "attached"`; otherwise the AV solve runs seeded from that iterate (`av_stage = "stalled"`). This makes the solver land on the attached family whenever one exists instead of whichever family the seed was nearest to (the two-branched AV circulation made depower continuations alternate every row). The trim result carries `av_stage`. Both trim result dicts carry `stalled_fraction` (span-weighted share of the wing past its 2-D stall onset), `stalled_area_fraction`, `n_stalled_panels` / `n_panels` and `stall_margin_min_deg` (`stall_fraction_fields`, onset = first interior Cl peak of each panel polar, the VSM's own AV gate; added 2026-09-01). Both trim solvers take `gamma_seed` (optional, one circulation value per
   panel; the tetherless solver since 2026-08-31 — before that it silently
   lacked the parameter and callers cold-started): an initial guess passed to

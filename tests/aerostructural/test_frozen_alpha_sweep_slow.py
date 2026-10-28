@@ -46,7 +46,7 @@ import pytest
 
 pytest.importorskip("VSM", reason="Vortex-Step-Method not installed")
 
-from awetrim.aerodynamics.vsm_quasi_steady import DEFAULT_AXES, _default_vsm_solver
+from awetrim.aerodynamics.vsm_quasi_steady import DEFAULT_AXES, default_vsm_solver
 from awetrim.aerostructural.aerodynamic_vsm import run_frozen_geometry_alpha_sweep
 from awetrim.identification.aero_dataset import aerodynamic_roll
 
@@ -89,7 +89,7 @@ def body_and_solver():
         body, _props = common.build_body(args)
     except Exception as exc:  # pragma: no cover - environment-dependent
         pytest.skip(f"could not build VSM body: {exc}")
-    solver = _default_vsm_solver(np.zeros(3))
+    solver = default_vsm_solver(np.zeros(3))
     return body, solver
 
 

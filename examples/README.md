@@ -20,7 +20,7 @@ example **from the project root**. They all use the TU Delft LEI-V3 kite in
 
 | Step | Folder | What it does | Writes |
 |------|--------|--------------|--------|
-| 1 | [`1_aerodynamics/`](1_aerodynamics/) | Describe the kite in `data/<kite>/`, solve one quasi-steady VSM trim and check its static stability | `results/aerodynamics/` |
+| 1 | [`1_aerodynamics/`](1_aerodynamics/) | Describe the kite in `data/<kite>/`, compute its lift and drag polars, solve one quasi-steady VSM trim and check its static stability | `results/aerodynamics/` |
 | 2 | [`2_aerostructural/`](2_aerostructural/) | Couple VSM and the Billow structure to the deformed shape the kite flies in, at wireframe or full fidelity | `results/<kite>/aerostructural/` |
 | 3 | [`3_rom_identification/`](3_rom_identification/) | Sweep the operating range with the coupled model of step 2 (depower and steering chains, frozen-shape polars), then identify the reduced-order model (ROM) from it: lift, drag, bridle pitch and roll gain | `results/<kite>/identification/` (dataset and `rom_config_aerostructural.yaml`) |
 | 4 | [`4_trajectory_optimization/`](4_trajectory_optimization/) | Simulate and optimise reel-out patterns and whole pumping cycles with the ROM | `data/<kite>/cycle_configs/`, `results/<kite>/optimization/` |
