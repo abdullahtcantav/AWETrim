@@ -1032,6 +1032,9 @@ def solve_vsm_quasi_steady_trim(
         "radial_axis": axes.radial,
         "normal_axis": axes.normal,
         "F_distribution": res.get("F_distribution"),
+        # per-panel moments about the solver's reference point: the exact
+        # (strut_lever) aero-to-structure load transfer needs them
+        "M_distribution": res.get("M_distribution"),
         "panel_cp_locations": res.get("panel_cp_locations"),
         "alpha_at_ac": res.get("alpha_at_ac"),
         "gamma_distribution": res.get("gamma_distribution"),
@@ -2330,6 +2333,7 @@ def solve_vsm_qs_trim_with_williams_tether(
             projected_area_cache.get("projected_area", 0.0),
         ),
         "F_distribution": payload["res"].get("F_distribution"),
+        "M_distribution": payload["res"].get("M_distribution"),
         "panel_cp_locations": payload["res"].get("panel_cp_locations"),
         "alpha_at_ac": payload["res"].get("alpha_at_ac"),
         "gamma_distribution": payload["res"].get("gamma_distribution"),

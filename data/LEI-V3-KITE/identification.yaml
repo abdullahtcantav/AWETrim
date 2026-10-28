@@ -14,10 +14,17 @@
 # results/<kite>/identification/<fidelity>/.
 #   billow     Billow's FULL model: inflatable tube beams, wrinkling membrane
 #              canopy and the bridle (struc_geometry_FEM_full.yaml).
-#   wireframe  Billow's line system on the PSM wireframe geometry: the model
-#              the shipped rom_config_aerostructural.yaml was identified on.
+#   wireframe  Billow's line system, REDUCED from the same full FEM file
+#              (wireframe.driver.build_case_reduced_fem: one structural file
+#              for both fidelities), flying the full geometry's aerodynamic
+#              mesh with canopy billowing and the exact (strut-lever) load
+#              transfer (docs/aerostructural/). The official identification
+#              since 2026-10-28. Until then this block flew the PSM wireframe
+#              (struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml: short
+#              chord, 17.2 m2, TE rest lengths cut to 0.95 x CAD by hand), the
+#              model the shipped rom_config_aerostructural.yaml was identified on.
 
-fidelity: billow
+fidelity: wireframe
 
 sweep:
   system_file: system.yaml      # in this folder: the masses (KCU) and the tether
@@ -65,23 +72,31 @@ sweep:
       steering:
         power_tape_lengths: [2.10, 2.40]
     wireframe:
-      struc_geometry: struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml
+      fem_geometry: struc_geometry_FEM_full.yaml
       system_file: system_flown_2019.yaml   # the hardware the shipped ROM used
-      # The fixed-stiffness model: every bridle line, tapes included, at this
-      # multiple of its file modulus (Dyneema tape is as stiff as the round
-      # lines), the wing at its own, and no elongation-bound stiffening: one
-      # kite for the whole sweep, whatever order the states are solved in.
-      bridle_modulus_factor: 9.0
+      # No bridle_modulus_factor: the FEM file's Dyneema is already the
+      # datasheet 109 GPa (the PSM file's 10 GPa needed x9). The fixed-
+      # stiffness model stays: no elongation-bound stiffening, one kite for
+      # the whole sweep, whatever order the states are solved in.
       # The wireframe flies at about 3.8 x the wind: 6 m/s reaches v_a 23.
       wind_speeds: [4.0, 5.0, 6.0]
       config_overrides:
         aerodynamic:
-          n_aero_panels_per_struc_section: 5   # 9 sections x 5 = 45 panels
+          # 27 FEM sections x 5 = 135 panels: within 0.5 % of 324 panels in
+          # CL and CD at 4-8 deg on the billowed wing (convergence study
+          # 2026-10-28, docs/aerostructural/)
+          n_aero_panels_per_struc_section: 5
+          # strut-to-strut trailing-edge contraction, LEI-V3 photogrammetry
+          # (Haanen 2026, Table 9.2: -5.23 % powered, -3.86 % depowered)
+          billowing:
+            contraction: 0.05
+          load_transfer: strut_lever
         structural_pss:
           update_stiffness: false
-      # Built at 1.50 m; the shipped campaign spanned 1.33-2.28 m.
+      # Built at 1.90 m (the FEM file); the range covers the flown reel-out
+      # and reel-in tapes and depowers enough to reel in.
       depower:
-        targets: [1.35, 2.25]
+        targets: [1.10, 2.60]
         step: 0.05
       # Near the 2019 reel-out and reel-in tapes.
       steering:
@@ -118,11 +133,22 @@ fit:
         input_depower:
           powered: 2.1
           depowered: 2.5
-    # The shipped ROM's band: down to 1.33 m, so the optimiser can explore
-    # tapes shorter than the flown 1.7 m.
+    # From the sweep (2026-10-28) with gust margins (docs/aerostructural/
+    # lei_v3_wing_corrections.md): powered end 1.30 m = alpha + atan(1 m/s /
+    # v_a) below the frozen polar's stall onset at 4-6 m/s (the tether-force
+    # peak sits at 1.25-1.30 m); depowered end 2.60 m = end of the sweep, the
+    # C_L slope still linear 6 deg below every trim. The force margin (15 %
+    # lull, 2 x KCU weight: F_t >= 602 N) depends on the wind, so it is a
+    # tension floor for the optimiser, not a tape limit. Fitted down to 1.25 m
+    # so the ROM sees the force peak.
     wireframe:
-      depower_band: [1.3, 2.2]
+      depower_band: [1.25, 2.6]
       controls:
         input_depower:
-          powered: 1.7
-          depowered: 2.1
+          powered: 1.3
+          depowered: 2.6
+      # Copied into the ROM's validity block. Minimum kite-end tether force
+      # [N]: 2 x KCU weight (22.2 kg flown) after a 15 % speed lull,
+      # 435 N / 0.85^2.
+      validity:
+        min_tether_force_n: 602.0

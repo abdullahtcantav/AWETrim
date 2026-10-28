@@ -123,10 +123,12 @@ is what a cache keys on). `solve_with_body(x_guess, gamma_seed)` returns
 `(result, body)` in the aerostructural coupling's vocabulary: the body from
 `body_at_trim` (rotated to the trim attitude, world-frame inflow set through
 the VSM `va` setter so `apparent_wind.inflow_state_of` reads it) and
-`F_distribution` / `panel_cp_locations` / `alpha_at_ac` (VSM's
-aerodynamic-centre alpha, the stall-detection input) from one
+`F_distribution` / `M_distribution` / `panel_cp_locations` / `alpha_at_ac`
+(VSM's aerodynamic-centre alpha, the stall-detection input) from one
 `Solver.solve` at the converged circulation, plus the stalled-fraction and
-KCU fields. `panel_kernels.line_force` and `apparent_wind.apparent_wind_at`
+KCU fields. The two NumPy trims (`vsm_quasi_steady`) return
+`M_distribution` too (since 2026-10-28): the exact strut-lever load transfer
+of the aerostructural coupling needs each panel's moment. `panel_kernels.line_force` and `apparent_wind.apparent_wind_at`
 accept symbolic endpoints/stations for this; their NumPy paths are unchanged.
 
 **In the aerostructural coupling** (`aerostructural/aerodynamic_vsm.py`,

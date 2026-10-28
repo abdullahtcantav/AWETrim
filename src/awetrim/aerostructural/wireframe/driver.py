@@ -13,6 +13,7 @@ Moved here from ``examples/2_aerostructural/run_simulation_PSM.py`` on
 
 import copy
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,11 @@ from awetrim.aerostructural.case import (
     resolve_kite_paths,
 )
 from awetrim.aerostructural.case_view import build_case_view, save_case_view
-from awetrim.aerostructural.mapping import BilinearAeroToStructuralLoadMapper
+from awetrim.aerostructural.billowing import panel_bays as panel_bays_by_construction
+from awetrim.aerostructural.mapping import (
+    BilinearAeroToStructuralLoadMapper,
+    StrutLeverAeroToStructuralLoadMapper,
+)
 from awetrim.aerostructural.results import (
     aerostructural_results_root,
     build_deformed_aero_geometry,
@@ -285,6 +290,10 @@ class WireframeCase:
     initial_polar_data: Any
     tether: Any
     structural_to_aero: Any = None
+    #: Bay (rib pair) of every aerodynamic panel, by construction; None = the
+    #: PSM convention, ``n_aero_panels_per_struc_section`` panels per rib bay.
+    #: Used by the strut-lever load transfer.
+    panel_bays: Any = None
 
 
 @dataclass
@@ -383,6 +392,7 @@ def build_case(
     struc_geometry_path=None,
     structural_to_aero=None,
     n_panels_aero=None,
+    panel_bays=None,
 ) -> WireframeCase:
     """Load the kite's files and build the VSM body and the tether, once.
 
@@ -457,6 +467,7 @@ def build_case(
         initial_polar_data=initial_polar_data,
         tether=tether,
         structural_to_aero=structural_to_aero,
+        panel_bays=panel_bays,
     )
 
 
@@ -537,16 +548,31 @@ def prepare_structure(case: WireframeCase, config: dict | None = None) -> Prepar
     ##################
     ### AERO2STRUC ###
     ##################
-    aero2struc_mapping = (
-        BilinearAeroToStructuralLoadMapper()
-        .initialize(
-            case.body_aero.panels,
-            struc_nodes,
-            reader["le_indices"],
-            reader["te_indices"],
+    if coupled_solver_qsm.load_transfer_of(config) == "strut_lever":
+        bays = case.panel_bays
+        if bays is None:
+            # the PSM convention: every rib is a strut, n panels per rib bay
+            bays = panel_bays_by_construction(
+                len(case.body_aero.panels),
+                config["aerodynamic"]["n_aero_panels_per_struc_section"],
+                range(len(reader["le_indices"])),
+            )
+        aero2struc_mapping = (
+            StrutLeverAeroToStructuralLoadMapper()
+            .initialize(bays, reader["le_indices"], reader["te_indices"])
+            .panel_corner_map
         )
-        .panel_corner_map
-    )
+    else:
+        aero2struc_mapping = (
+            BilinearAeroToStructuralLoadMapper()
+            .initialize(
+                case.body_aero.panels,
+                struc_nodes,
+                reader["le_indices"],
+                reader["te_indices"],
+            )
+            .panel_corner_map
+        )
     return PreparedWireframe(
         psystem=psystem,
         reader=reader,
@@ -705,6 +731,7 @@ def solve_deformation(
     struc_geometry_path=None,
     structural_to_aero=None,
     n_panels_aero=None,
+    panel_bays=None,
 ) -> dict:
     """Run one PSS/QSM aerostructural deformation and snapshot the result.
 
@@ -745,6 +772,7 @@ def solve_deformation(
         struc_geometry_path=struc_geometry_path,
         structural_to_aero=structural_to_aero,
         n_panels_aero=n_panels_aero,
+        panel_bays=panel_bays,
     )
     config = case.config
     case_folder = build_actuation_case_folder(config)
@@ -837,16 +865,24 @@ def solve_deformation(
     }
 
 
-def solve_deformation_reduced_fem(
+def billowing_contraction(config) -> float:
+    """``aerodynamic.billowing.contraction``: uniform strut-to-strut TE
+    contraction p (fraction), 0 = off."""
+    block = (config.get("aerodynamic") or {}).get("billowing") or {}
+    return float(block.get("contraction", 0.0))
+
+
+def build_case_reduced_fem(
     config_overrides: dict | None = None,
     *,
     kite_name: str = DEFAULT_KITE_NAME,
     project_dir=None,
-    results_dir=None,
+    work_dir=None,
     system_config_path=None,
     fem_geometry_filename: str = "struc_geometry_FEM_full.yaml",
-) -> dict:
-    """One wireframe case on the wireframe REDUCED from the full FEM geometry.
+    config: dict | None = None,
+) -> WireframeCase:
+    """The wireframe case REDUCED from the full FEM geometry, one input file.
 
     The same input file as the Billow full model
     (``billow.driver.solve_deformation``), so the two differ only in the
@@ -856,16 +892,35 @@ def solve_deformation_reduced_fem(
     wireframe (``reduce_fem.reduce_fem_geometry``: one rib per strut, two wing
     nodes per rib, the per-strut line fans collapsed to one equivalent line,
     tube and canopy stiffnesses from Billow's materials). The reduction is
-    written to ``<results_dir>/struc_geometry_wireframe.yaml`` and solved with
-    :func:`solve_deformation`.
+    written to ``<work_dir>/struc_geometry_wireframe.yaml``.
+
+    The aerodynamic mesh is the FULL geometry's -- its true leading and
+    trailing edges, every section, ``n_aero_panels_per_struc_section`` panels
+    per FEM section -- carried on the reduced ribs by a
+    ``SkinStructuralToAeroMapper``, so the wireframe and Billow fly the same
+    wing (without it the wireframe would fly the PSM convention: a wing whose
+    edges ARE the bridle attachment nodes, x/c 0.01 to 0.90, 11 % short of the
+    chord).
+
+    ``aerodynamic.billowing.contraction`` p > 0 billows that mesh
+    (:mod:`awetrim.aerostructural.billowing`): the struts rotate about their
+    leading edge until every inner bay's trailing edge is (1 - p) of the
+    built one, and the canopy between them is the circular arc of its fabric
+    length. The reduced ribs move with their struts and the wing members take
+    the new distances as rest lengths, so the structure holds the contraction
+    the aerodynamic mesh is drawn with; the bridle keeps its lengths. The
+    refined arc points are carried by the skin directly (one per anchor), so
+    the arc survives the deformation.
 
     ``config_overrides`` is merged key by key (nested dicts too) over the
-    kite's ``as_config.yaml``; ``system_config_path`` defaults to the kite's
-    ``system.yaml``.
+    kite's ``as_config.yaml`` (or over ``config`` when given);
+    ``system_config_path`` defaults to the kite's ``system.yaml``.
     """
     from awetrim.aerostructural.billow.driver import merge_config
     from awetrim.aerostructural.billow.structural_billow import relax_bridle_nodes
+    from awetrim.aerostructural.billowing import billow_wing, refine_billowed_wing
     from awetrim.aerostructural.coupled import read_struc_geometry_yaml
+    from awetrim.aerostructural.mapping import SkinStructuralToAeroMapper
     from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
 
     project_dir = Path(project_dir) if project_dir is not None else REPO_ROOT
@@ -875,7 +930,9 @@ def solve_deformation_reduced_fem(
     )
     with system_config_path.open("r", encoding="utf-8") as handle:
         system_config = _yaml.safe_load(handle)
-    config = merge_config(load_yaml(config_path), config_overrides)
+    config = merge_config(
+        config if config is not None else load_yaml(config_path), config_overrides
+    )
 
     fem_path = project_dir / "data" / kite_name / fem_geometry_filename
     fem = load_yaml(fem_path)
@@ -897,47 +954,97 @@ def solve_deformation_reduced_fem(
     )
     reduced = reduce_fem_geometry(fem, nodes=relaxed, masses=masses, config=config)
 
-    # The aerodynamic mesh of the FULL geometry -- its true leading and
-    # trailing edges, every section -- carried on the reduced ribs, so the
-    # wireframe and Billow fly the same wing. Without it the wireframe would
-    # fly the PSM convention: a wing whose edges ARE the bridle attachment
-    # nodes (x/c 0.01 to 0.90, 11 % short of the chord, on 10 ribs).
-    from awetrim.aerostructural.mapping import SkinStructuralToAeroMapper
-
     per_section = int(config["aerodynamic"]["n_aero_panels_per_struc_section"])
     n_ribs = len(reduced["wing_particles"]["data"]) // 2
+    relaxed = np.asarray(relaxed, dtype=float)
+    fem_le, fem_te = np.asarray(reader[2], dtype=int), np.asarray(reader[3], dtype=int)
+    # the FEM section of every reduced rib (both run +y to -y)
+    rib_le_node = [
+        int(row[-1][0])
+        for row in sorted(
+            fem["strut_tubes"]["data"], key=lambda row: -relaxed[int(row[-1][0])][1]
+        )
+    ]
+    rib_sections = [int(np.flatnonzero(fem_le == node)[0]) for node in rib_le_node]
+    if rib_sections != sorted(rib_sections) or len(rib_sections) != n_ribs:
+        raise ValueError(f"reduced ribs do not follow the FEM sections: {rib_sections}")
+
+    le_points, te_points = relaxed[fem_le], relaxed[fem_te]
+    contraction = billowing_contraction(config)
+    if contraction > 0.0:
+        wing = billow_wing(le_points, te_points, rib_sections, contraction)
+        le_points, te_points = refine_billowed_wing(wing, per_section)
+        skin_per_section = 1  # the arc points are anchored themselves
+        # the ribs move with their struts; the wing members rest at the new shape
+        positions = {
+            int(row[0]): np.asarray(row[1:4], dtype=float)
+            for row in reduced["wing_particles"]["data"]
+        }
+        for r, section in enumerate(rib_sections):
+            for node in (2 * r + 1, 2 * r + 2):
+                positions[node] = wing.move_with_section(section, positions[node])
+        reduced["wing_particles"]["data"] = [
+            [node, *map(float, positions[node])] for node in sorted(positions)
+        ]
+        ends = {
+            row[0]: (int(row[1]), int(row[2])) for row in reduced["wing_connections"]["data"]
+        }
+        for row in reduced["wing_elements"]["data"]:
+            ci, cj = ends[row[0]]
+            row[1] = round(float(np.linalg.norm(positions[ci] - positions[cj])), 6)
+        reduced["billowing"] = {
+            "contraction": float(contraction),
+            "bays": [
+                {
+                    "sections": [bay.first, bay.last],
+                    "chord_built": round(float(bay.chord_built), 6),
+                    "chord": round(float(bay.chord), 6),
+                    "fabric_length": round(float(bay.fabric_length), 6),
+                    "billowing": round(float(bay.billowing), 6),
+                    "theta_deg": round(float(np.degrees(bay.theta)), 4),
+                    "depth": round(float(bay.depth), 6),
+                }
+                for bay in wing.bays
+            ],
+        }
+        logging.info(
+            "billowing p = %.3f: inner bays 1 - c/L_f = %s",
+            contraction,
+            [round(b["billowing"], 4) for b in reduced["billowing"]["bays"][1:-1]],
+        )
+    else:
+        skin_per_section = per_section
+
     reduced_nodes = np.zeros((1 + n_ribs * 2 + len(reduced["bridle_particles"]["data"]), 3))
     reduced_nodes[0] = reduced["bridle_point_node"]
     for key in ("wing_particles", "bridle_particles"):
         for row in reduced[key]["data"]:
             reduced_nodes[int(row[0])] = row[1:4]
-    reduced_nodes = rotate_geometry(
-        reduced_nodes, **resolve_initial_geometry_rotation_kwargs(config)
-    )
-    fem_le, fem_te = np.asarray(reader[2], dtype=int), np.asarray(reader[3], dtype=int)
-    full_nodes = rotate_geometry(
-        np.asarray(relaxed, dtype=float), **resolve_initial_geometry_rotation_kwargs(config)
-    )
+    rotation = resolve_initial_geometry_rotation_kwargs(config)
     skin = SkinStructuralToAeroMapper().initialize(
-        reduced_nodes,
+        rotate_geometry(reduced_nodes, **rotation),
         front_indices=[2 * r + 1 for r in range(n_ribs)],
         rear_indices=[2 * r + 2 for r in range(n_ribs)],
-        le_points=full_nodes[fem_le],
-        te_points=full_nodes[fem_te],
-        n_panels_per_section=per_section,
+        le_points=rotate_geometry(le_points, **rotation),
+        te_points=rotate_geometry(te_points, **rotation),
+        n_panels_per_section=skin_per_section,
     )
     n_panels_aero = (len(fem_le) - 1) * per_section
 
-    results_dir = Path(
-        results_dir
+    work_dir = Path(
+        work_dir
         or aerostructural_results_root(project_dir, kite_name)
         / "wireframe"
         / build_actuation_case_folder(config)
     )
-    results_dir.mkdir(parents=True, exist_ok=True)
-    reduced_path = results_dir / "struc_geometry_wireframe.yaml"
-    with reduced_path.open("w", encoding="utf-8") as handle:
+    work_dir.mkdir(parents=True, exist_ok=True)
+    reduced_path = work_dir / "struc_geometry_wireframe.yaml"
+    # written whole and then moved into place: parallel sweep processes build
+    # the same case and must never read a half-written file
+    partial = reduced_path.with_suffix(f".{os.getpid()}.tmp")
+    with partial.open("w", encoding="utf-8") as handle:
         _yaml.safe_dump(reduced, handle, sort_keys=False)
+    os.replace(partial, reduced_path)
     logging.info(
         "wireframe reduced from %s: %d wing + %d bridle nodes, wing %.3f kg, "
         "bridle %.3f kg -> %s",
@@ -948,13 +1055,63 @@ def solve_deformation_reduced_fem(
         reduced["reduction"]["bridle_mass"],
         reduced_path,
     )
-    return solve_deformation(
-        config=config,
+    return build_case(
+        config,
         kite_name=kite_name,
         project_dir=project_dir,
-        results_dir=results_dir,
         system_config_path=system_config_path,
         struc_geometry_path=reduced_path,
         structural_to_aero=skin,
         n_panels_aero=n_panels_aero,
+        panel_bays=panel_bays_by_construction(n_panels_aero, per_section, rib_sections),
+    )
+
+
+def solve_deformation_reduced_fem(
+    config_overrides: dict | None = None,
+    *,
+    kite_name: str = DEFAULT_KITE_NAME,
+    project_dir=None,
+    results_dir=None,
+    system_config_path=None,
+    fem_geometry_filename: str = "struc_geometry_FEM_full.yaml",
+) -> dict:
+    """One wireframe case on the wireframe REDUCED from the full FEM geometry
+    (:func:`build_case_reduced_fem`, the reduction written to
+    ``<results_dir>/struc_geometry_wireframe.yaml``), solved with
+    :func:`solve_deformation`.
+
+    ``config_overrides`` is merged key by key (nested dicts too) over the
+    kite's ``as_config.yaml``; ``system_config_path`` defaults to the kite's
+    ``system.yaml``.
+    """
+    from awetrim.aerostructural.billow.driver import merge_config
+
+    project_dir = Path(project_dir) if project_dir is not None else REPO_ROOT
+    config_path, _, _ = resolve_kite_paths(project_dir, kite_name)
+    config = merge_config(load_yaml(config_path), config_overrides)
+    results_dir = Path(
+        results_dir
+        or aerostructural_results_root(project_dir, kite_name)
+        / "wireframe"
+        / build_actuation_case_folder(config)
+    )
+    case = build_case_reduced_fem(
+        config=config,
+        kite_name=kite_name,
+        project_dir=project_dir,
+        work_dir=results_dir,
+        system_config_path=system_config_path,
+        fem_geometry_filename=fem_geometry_filename,
+    )
+    return solve_deformation(
+        config=case.config,
+        kite_name=kite_name,
+        project_dir=project_dir,
+        results_dir=results_dir,
+        system_config_path=case.system_config_path,
+        struc_geometry_path=case.struc_geometry_path,
+        structural_to_aero=case.structural_to_aero,
+        n_panels_aero=len(case.body_aero.panels),
+        panel_bays=case.panel_bays,
     )

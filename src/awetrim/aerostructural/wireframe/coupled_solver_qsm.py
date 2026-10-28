@@ -46,6 +46,7 @@ from ..forces import distribute_total_force_by_particle_mass
 from ..mapping import (
     BilinearAeroToStructuralLoadMapper,
     LinearStructuralToAeroMapper,
+    StrutLeverAeroToStructuralLoadMapper,
     check_moment_preservation,
 )
 from ..protocols import AeroToStructureMap
@@ -58,6 +59,7 @@ from ..utils import (
 
 STRUCTURAL_TO_AERO_MAPPER = LinearStructuralToAeroMapper()
 AERO_TO_STRUCTURAL_LOAD_MAPPER = BilinearAeroToStructuralLoadMapper()
+STRUT_LEVER_LOAD_MAPPER = StrutLeverAeroToStructuralLoadMapper()
 
 
 def _map_structural_edges_to_aero(
@@ -106,20 +108,55 @@ def _bridle_node_pairs(bridle_line_specs, struc_nodes, body_aero):
     )
 
 
+def load_transfer_of(config) -> str:
+    """``aerodynamic.load_transfer``: ``bilinear`` (default) or ``strut_lever``."""
+    name = str((config.get("aerodynamic") or {}).get("load_transfer", "bilinear")).lower()
+    if name not in ("bilinear", "strut_lever"):
+        raise ValueError(f"aerodynamic.load_transfer must be bilinear or strut_lever, got {name!r}")
+    return name
+
+
 def _map_aero_loads_to_structure(
     f_aero_wing_vsm_format,
     struc_nodes,
-    panel_cp_locations,
+    results_aero,
     aero2struc_mapping,
+    config,
+    check=False,
 ):
-    """Return nodal aerodynamic loads from panel loads and a corner map."""
+    """Return nodal aerodynamic loads from panel loads and a corner map.
+
+    ``bilinear``: each panel force at VSM's per-panel centre of pressure,
+    bilinear weights onto its corner nodes (moment not conserved).
+    ``strut_lever``: the same force with its residual moment
+    ``M_i - (cp_i - ref) x F_i`` (what VSM's clamped centre of pressure leaves
+    out; ``ref`` = ``aerodynamic.reference_point``, about which VSM gives
+    ``M_distribution``), rigid-body onto the bay's struts -- force and moment
+    exact. ``check`` logs :func:`check_moment_preservation`.
+    """
     mapping = AeroToStructureMap(panel_corner_map=np.asarray(aero2struc_mapping))
-    return AERO_TO_STRUCTURAL_LOAD_MAPPER.map_loads(
-        f_aero_wing_vsm_format,
-        panel_cp_locations,
-        struc_nodes,
-        mapping,
-    )
+    forces = np.asarray(f_aero_wing_vsm_format, dtype=float)
+    cp = np.asarray(results_aero["panel_cp_locations"], dtype=float)
+    moments = None
+    if load_transfer_of(config) == "strut_lever":
+        if results_aero.get("M_distribution") is None:
+            raise ValueError(
+                "load_transfer strut_lever needs the trim's per-panel moments (M_distribution)"
+            )
+        ref = np.asarray(config["aerodynamic"].get("reference_point", [0.0, 0.0, 0.0]), dtype=float)
+        moments = np.asarray(results_aero["M_distribution"], dtype=float) - np.cross(cp - ref, forces)
+        nodal = STRUT_LEVER_LOAD_MAPPER.map_loads(forces, cp, struc_nodes, mapping, panel_moments=moments)
+    else:
+        nodal = AERO_TO_STRUCTURAL_LOAD_MAPPER.map_loads(forces, cp, struc_nodes, mapping)
+    if check:
+        check_moment_preservation(
+            panel_forces=forces,
+            panel_points=cp,
+            nodal_forces=nodal,
+            nodes=struc_nodes,
+            panel_moments=moments,
+        )
+    return nodal
 
 
 # Remove hardcoded values, when changing away from V3
@@ -1013,20 +1050,14 @@ def main(
     struc_nodes = rotate_geometry(struc_nodes, angle_deg=[roll, pitch, yaw])
     if outer_acceleration == "anderson":
         _rotate_anderson_history(roll, pitch, yaw)
-    ### AERO --> STRUC
+    ### AERO --> STRUC (and the moment-preservation check, pre-loop)
     f_aero_wing = _map_aero_loads_to_structure(
         f_aero_wing_vsm_format,
         struc_nodes,
-        np.array(results_aero["panel_cp_locations"]),
+        results_aero,
         aero2struc_mapping,
-    )
-
-    # Check moment preservation of aero→struc mapping (pre-loop)
-    check_moment_preservation(
-        panel_forces=f_aero_wing_vsm_format,
-        panel_points=np.array(results_aero["panel_cp_locations"]),
-        nodal_forces=f_aero_wing,
-        nodes=struc_nodes,
+        config,
+        check=True,
     )
 
     ### BRIDLE AERO
@@ -1411,22 +1442,16 @@ def main(
             struc_nodes = rotate_geometry(struc_nodes, angle_deg=[roll, pitch, yaw])
             if outer_acceleration == "anderson":
                 _rotate_anderson_history(roll, pitch, yaw)
-            ### AERO --> STRUC
+            ### AERO --> STRUC (moment check on the first coupling iteration
+            ### only, to limit log spam)
             f_aero_wing = _map_aero_loads_to_structure(
                 f_aero_wing_vsm_format,
                 struc_nodes,
-                np.array(results_aero["panel_cp_locations"]),
+                results_aero,
                 aero2struc_mapping,
+                config,
+                check=(i == 1),
             )
-
-            # Check moment preservation (only first coupling iteration to limit log spam)
-            if i == 1:
-                check_moment_preservation(
-                    panel_forces=f_aero_wing_vsm_format,
-                    panel_points=np.array(results_aero["panel_cp_locations"]),
-                    nodal_forces=f_aero_wing,
-                    nodes=struc_nodes,
-                )
 
             ### BRIDLE AERO
             if config["is_with_aero_bridle"]:

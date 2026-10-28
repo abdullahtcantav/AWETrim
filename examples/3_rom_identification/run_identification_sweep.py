@@ -3,8 +3,13 @@
 Coupled VSM + Billow states at the centre of the wind window, gravity off,
 along continuation chains, at either structural fidelity (`fidelity` in
 identification.yaml, or --fidelity): `billow`, the full model (tube beams,
-membrane canopy, bridle), or `wireframe`, the bridle line system on the PSM
-wireframe geometry (the model the shipped ROM was identified on):
+membrane canopy, bridle), or `wireframe`, the bridle line system. The
+wireframe either reads its own geometry (`struc_geometry`, the PSM file the
+shipped ROM was identified on) or, with `fem_geometry`, is reduced from the
+full FEM file and flies its full-chord aerodynamic mesh
+(wireframe.driver.build_case_reduced_fem: one structural file for both
+fidelities; billowed with aerodynamic.billowing.contraction, loads moved with
+aerodynamic.load_transfer: strut_lever):
 
 * depower chains: from the tape length the geometry is built at, the power
   tape walks to each target length, one converged state per step;
@@ -159,13 +164,23 @@ def open_case(fidelity: str, spec: dict, kite: str):
         from awetrim.aerostructural.wireframe import driver
 
         config_path, _, _ = resolve_kite_paths(PROJECT_DIR, kite)
-        case = driver.build_case(
-            merge_config(load_yaml(config_path), spec.get("config_overrides")),
-            kite_name=kite, project_dir=PROJECT_DIR, system_config_path=system_path,
-            struc_geometry_path=(
-                kite_dir / spec["struc_geometry"] if spec.get("struc_geometry") else None
-            ),
-        )
+        config = merge_config(load_yaml(config_path), spec.get("config_overrides"))
+        if spec.get("fem_geometry"):
+            # the wireframe reduced from the full FEM file (one structural
+            # file for both fidelities), its aero mesh the full geometry's
+            # (billowed when aerodynamic.billowing.contraction > 0)
+            case = driver.build_case_reduced_fem(
+                config=config, kite_name=kite, project_dir=PROJECT_DIR,
+                work_dir=PROJECT_DIR / "results" / kite / "identification" / fidelity / "geometry",
+                system_config_path=system_path, fem_geometry_filename=spec["fem_geometry"],
+            )
+        else:
+            case = driver.build_case(
+                config, kite_name=kite, project_dir=PROJECT_DIR, system_config_path=system_path,
+                struc_geometry_path=(
+                    kite_dir / spec["struc_geometry"] if spec.get("struc_geometry") else None
+                ),
+            )
     return driver, case
 
 
@@ -430,6 +445,9 @@ def main() -> None:
     parser.add_argument("--fidelity", choices=ds.FIDELITIES, default=None,
                         help="structural model (default: identification.yaml's)")
     parser.add_argument("--chains", nargs="+", help="solve only these chains")
+    parser.add_argument("--wind-speeds", type=float, nargs="+", default=None,
+                        help="replace identification.yaml's wind_speeds (e.g. extra chains "
+                        "at higher wind; combine with --chains)")
     parser.add_argument("--list", action="store_true", help="list the chains and exit")
     parser.add_argument("--base-only", action="store_true",
                         help="solve the base states (start_from_converged) and exit; "
@@ -442,6 +460,8 @@ def main() -> None:
     fidelity, spec = ds.identification_settings(
         PROJECT_DIR / "data" / args.kite / "identification.yaml", "sweep", args.fidelity
     )
+    if args.wind_speeds:
+        spec["wind_speeds"] = list(args.wind_speeds)
     out = PROJECT_DIR / "results" / args.kite / "identification" / fidelity / "sweep"
     driver, case = open_case(fidelity, spec, args.kite)
     built = prepare(driver, case, spec, case.config).power_tape_length

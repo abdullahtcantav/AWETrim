@@ -249,6 +249,9 @@ def rom_document(fits, theta, roll, polar, fit_spec, stall, kite, n_trims, fidel
                                     float(np.ceil(alpha_deg.max()))],
             "input_depower": [float(polar.u_p.min()), float(polar.u_p.max())],
             "input_steering_abs_max": float(polar.u_s.abs().max()),
+            # the fit block's own validity limits (e.g. min_tether_force_n,
+            # the force margin that depends on the wind and so is no tape limit)
+            **(fit_spec.get("validity") or {}),
         },
         "aerodynamics": aero,
         "tether": fit_spec["rom_tether"],

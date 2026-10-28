@@ -46,7 +46,49 @@ src/awetrim/aerostructural/
                                    bilinear coordinates + normal offset, exact
                                    at the reference, rigid under rigid motion;
                                    the reduced-FEM wireframe flies Billow's
-                                   aero mesh through it)
+                                   aero mesh through it),
+                                   StrutLeverAeroToStructuralLoadMapper (the
+                                   EXACT aero->structure transfer, config
+                                   aerodynamic.load_transfer: strut_lever;
+                                   default bilinear: force exact, moment lost
+                                   2-6 % on the LEI-V3 full chord): per panel,
+                                   lever rule onto the bay's two strut lines
+                                   (front->rear rib node), the moment of the
+                                   move carried, the twist about a strut axis
+                                   as a couple across the span (3x6 min-norm),
+                                   each strut onto its 2 nodes. Force AND moment
+                                   to rounding on warped bays and off-bay
+                                   points; the bilinear split on a flat bay.
+                                   Cayon 2022 Sec. 6.3 with the term its
+                                   force2nodes dropped (closest points on skew
+                                   lines). Takes the panel force at VSM's
+                                   centre of pressure plus the residual moment
+                                   M_i - (cp_i - ref) x F_i (needs the trim's
+                                   M_distribution; both NumPy trims and the
+                                   CasADi trim return it). Panels are assigned
+                                   to bays BY CONSTRUCTION (billowing.
+                                   panel_bays), never by sorting y: the curled
+                                   LEI-V3 tip gave the bilinear y-search a
+                                   degenerate tip quad. check_moment_preservation
+                                   takes panel_moments. Derivation and
+                                   verification: docs/aerostructural/
+                                   strut_lever_load_transfer.md
+  billowing.py                     Canopy billowing as a geometric correction of
+                                   a canopy-less (wireframe) aero mesh:
+                                   billow_wing(le, te, strut_sections, p) --
+                                   struts rotate about their LE node in the wing
+                                   surface until every inner bay's straight TE is
+                                   (1 - p) of the built one; the TE between them
+                                   is the circular arc of the bay's fabric
+                                   length, sin(theta)/theta = c/L_f (Cayon 2022
+                                   Sec. 5.3: inextensible membrane, constant
+                                   pressure -> constant tension -> circle); tip
+                                   bays ride rigidly with the outer strut.
+                                   refine_billowed_wing (sections on the arc),
+                                   panel_bays. p from photogrammetry (LEI-V3:
+                                   0.05, Haanen 2026 Table 9.2). Billow full
+                                   resolves billowing itself: never add it there.
+                                   docs/aerostructural/lei_v3_wing_corrections.md
   forces.py                        distribute_total_force_by_particle_mass
   convergence.py                   check_convergence, resolve_residual_tolerances,
                                    set_absolute_residual_gate, force_settle_state,
@@ -162,7 +204,19 @@ src/awetrim/aerostructural/
                                    the wireframe REDUCED from
                                    struc_geometry_FEM_full.yaml, flying the full
                                    geometry's aero mesh -- the public demo, so
-                                   it and Billow differ only in the structure
+                                   it and Billow differ only in the structure.
+                                   Its case is build_case_reduced_fem (also the
+                                   identification sweep's, identification.yaml
+                                   fem_geometry): aerodynamic.billowing.
+                                   contraction > 0 billows the aero mesh, moves
+                                   the reduced ribs with their struts and rests
+                                   the wing members at the new distances (bridle
+                                   unchanged); the refined arc points are
+                                   anchored in the skin one by one (static arc,
+                                   carried rigidly). WireframeCase.panel_bays
+                                   carries the bay of every panel for the
+                                   strut-lever transfer; prepare_structure
+                                   builds the corner map from it
                                    solve_deformation = build_case (config,
                                    files, VSM body, tether) + prepare_structure
                                    (one live wireframe; PreparedWireframe reads
