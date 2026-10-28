@@ -452,6 +452,10 @@ class Phase:
             total_objective = total_objective + self._trust_region_penalty(
                 self._opti_params, trust_region_weight
             )
+        # Proximal anchor on the per-node depower profile
+        # (sim_parameters.depower_anchor_weight; None when off).
+        if objective_dict.get("depower_anchor") is not None:
+            total_objective = total_objective + objective_dict["depower_anchor"]
 
         solution = self.run_opti(
             opti, total_objective, warm_start=warm_start, max_iter=max_iter

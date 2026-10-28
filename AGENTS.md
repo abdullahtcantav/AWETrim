@@ -102,7 +102,14 @@ src/awetrim/
                          half as variables) -- open follow-up.
                          sim_parameters.fix_depower_profile: per-node depower
                          held at its warm start (the full-cycle closing
-                         stage). sim_parameters.parametric_speed_floor: the
+                         stage). sim_parameters.depower_anchor_weight: the
+                         soft alternative, w * mean(((l_dp - l_dp_warm) /
+                         depower bound width)^2) in the objective
+                         (objective_dict["depower_anchor"]); excludes the
+                         hold (the closing stage of a --continue-from run:
+                         its depower was optimal at another wind and in the
+                         rated region only depowering sheds the extra
+                         force). sim_parameters.parametric_speed_floor: the
                          anti-hesitation floor sigma' >= f sigma_ref without a
                          turn-radius constraint (the full-cycle seeds emit
                          0.2; a collapsed sigma' is a spline cusp that breaks
@@ -208,7 +215,7 @@ commit bad8a9b) and `config_paths.LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG` keeps its
 path so the comparison scripts run on a checkout of it.
 
 Full-cycle optimisation scripts (`optimization/cycle/`): `fit_periodic_cycle_config.py`
-+ `run_full_cycle_opti.py` (multi-lobe cycle; closed through the `periodic_wrap` seam, the closing stage uses the one-sided `close_radial_cycle` pin; step boxes ±0.15 rad / ±50 m in the closing stage, 4x that in the power stage and polish; `--step-scale` scales the latter). Studies
++ `run_full_cycle_opti.py` (multi-lobe cycle; closed through the `periodic_wrap` seam, the closing stage uses the one-sided `close_radial_cycle` pin; step boxes ±0.15 rad / ±50 m in the closing stage, 4x that in the power stage and polish; `--step-scale` scales the latter; the closing stage holds the depower profile, except on a `--continue-from` run, where it anchors it with `depower_anchor_weight` 0.05 so a wind continuation can depower into the rated region). Studies
 built on them live in `optimization/studies/` (see its README), e.g.
 `run_uploop_eight_opti.py` + `plot_uploop_eight_comparison.py` (ONE slanted up-loop figure eight per period: low lobe
 + crossings reel out, high arc reels in; `periodic_wrap`, `free_speed`, free

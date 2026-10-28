@@ -734,6 +734,43 @@ def test_periodic_wrap_guards():
         phase.opti_phase(start_state=start, opti_params={})
 
 
+@pytest.mark.slow
+def test_depower_anchor_is_an_objective_term_only():
+    """``depower_anchor_weight`` adds no constraint rows; it returns a convex
+    quadratic in the depower profile, diagonal with the stated weight over the
+    bound width squared and n_points, zero at the warm start. Off it is None,
+    and it refuses to be combined with the ``fix_depower_profile`` hold."""
+    import casadi as ca
+
+    from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
+
+    n_points = 12
+    base = dict(_WRAP_FORMULATIONS["free_speed+depower"][0])
+    base["input_depower_profile"] = [1.6] * (n_points + 1)
+    phase_off, start = _wrap_phase(n_points, dict(base))
+    opti_off, _, obj_off = phase_off.opti_phase(start_state=start, opti_params={})
+    phase_on, start = _wrap_phase(n_points, {**base, "depower_anchor_weight": 0.5})
+    opti_on, vars_on, obj_on = phase_on.opti_phase(start_state=start, opti_params={})
+
+    assert obj_off["depower_anchor"] is None
+    assert opti_on.g.numel() == opti_off.g.numel()
+    u = vars_on["input_depower"]
+    H = ca.Function("H", [u], [ca.hessian(obj_on["depower_anchor"], u)[0]])(
+        np.full(n_points, 1.6)
+    )
+    # the RESOLVED band (the system file's KCU range), not the generic default
+    lo, hi = phase_on._resolve_opti_limits()["input_depower"]
+    assert (lo, hi) != tuple(DEFAULT_OPTI_LIMITS["input_depower"])
+    expected = 2.0 * 0.5 / (hi - lo) ** 2 / n_points
+    np.testing.assert_allclose(np.asarray(H), expected * np.eye(n_points), rtol=1e-12)
+
+    phase_both, start = _wrap_phase(
+        n_points, {**base, "depower_anchor_weight": 0.5, "fix_depower_profile": True}
+    )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        phase_both.opti_phase(start_state=start, opti_params={})
+
+
 # --- slow: mirror symmetry (half-period mirror rows) -------------------------
 
 

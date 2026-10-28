@@ -1901,6 +1901,37 @@ class PhaseParameterized(TimeSeries):
             )
             print("Depower profile held at its warm start (fix_depower_profile)")
 
+        # Optional: a proximal anchor on the depower profile instead of the
+        # hold (``sim_parameters["depower_anchor_weight"]``): w * mean of
+        # ((l_dp - l_dp_warm) / bound width)^2, added to the objective by
+        # ``Phase.run_simulation_opti``. For a warm start optimal at ANOTHER
+        # operating point (a wind continuation): in the rated region the extra
+        # force can only be shed by depowering, which the hold forbids (11 ->
+        # 12 m/s at 100 m stalled locally infeasible with the reel-out speed
+        # at its cap), while the anchor still makes reeling in powered a large,
+        # costly move. Off (absent/0): the NLP is unchanged.
+        depower_anchor = None
+        depower_anchor_weight = float(sim_params.get("depower_anchor_weight", 0.0) or 0.0)
+        if optimize_depower_profile and depower_anchor_weight > 0.0:
+            if bool(sim_params.get("fix_depower_profile", False)):
+                raise ValueError(
+                    "depower_anchor_weight and fix_depower_profile are mutually exclusive"
+                )
+            if "input_depower" not in warm_starts:
+                raise ValueError("depower_anchor_weight needs a depower warm start")
+            lo, hi = limits["input_depower"]
+            depower_anchor = depower_anchor_weight * ca.sumsqr(
+                (
+                    opti_vars["input_depower"]
+                    - ca.DM(np.asarray(warm_starts["input_depower"], dtype=float))
+                )
+                / float(hi - lo)
+            ) / N
+            print(
+                "Depower profile anchored to its warm start "
+                f"(depower_anchor_weight={depower_anchor_weight:g})"
+            )
+
         # Fix initial radius (constrain the scaled decision so the row stays
         # O(1)). With ``r0`` as a named optimization parameter the pin follows
         # the symbol instead of the numeric start state: the operating radius
@@ -3041,6 +3072,7 @@ class PhaseParameterized(TimeSeries):
             "power_scale": P_scale,
             "reg": reg,
             "radial_closure": radial_closure,
+            "depower_anchor": depower_anchor,
             "angle_elevation_start": angle_elevation[0],
             "angle_elevation_end": angle_elevation[-1],
             "constraint_report": constraint_report,

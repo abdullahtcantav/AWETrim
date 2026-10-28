@@ -156,6 +156,12 @@ STAGES = [
         "params": ["C_phi", "C_beta", "r0"],
         "target": "zero",
         "fix_depower": True,
+        # A CONTINUATION (--continue-from) anchors the profile instead
+        # (sim_parameters.depower_anchor_weight): its depower was optimal at
+        # another wind, and in the rated region the extra force can only be
+        # shed by depowering -- held, 11 -> 12 m/s at 100 m was locally
+        # infeasible with the reel-out speed at its cap.
+        "depower_anchor": 0.05,
         # The one-sided radius pin, not the seam closure: a seed open by tens
         # of metres ends with steering and reel speed far from node 0, and
         # closing it while also holding the seam's rate rows was locally
@@ -664,7 +670,9 @@ def main(
             wrap = seed_wrap and bool(stage.get("periodic", True))
             sim["periodic_wrap"] = wrap
             sim["close_radial_cycle"] = bool(stage["hard_close"]) and not wrap
-            sim["fix_depower_profile"] = bool(stage.get("fix_depower", False))
+            anchor = float(stage.get("depower_anchor", 0.0)) if skip_validation else 0.0
+            sim["fix_depower_profile"] = bool(stage.get("fix_depower", False)) and not anchor
+            sim["depower_anchor_weight"] = anchor
             step_bounds = stage.get("step_bounds") or {}
             target = stage.get("target", "power")
             repeats = int(stage.get("repeat", 1))
