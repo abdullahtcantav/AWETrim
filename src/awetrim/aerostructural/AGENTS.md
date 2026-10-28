@@ -1032,7 +1032,26 @@ the solution family instead of resuming the state. Preset ==
 `steering_tape_final_extension` → no walk at all; a different final target
 walks only the difference. Cold solves must NOT preset (the ramp doubles as
 their load continuation); preset only from a deformed snapshot equilibrated
-at these lengths.
+at these lengths. Since 2026-10-27 snapshots DO store their actuation (see
+the next note), so starting from a new snapshot needs no preset, and a preset
+on one would apply the steering twice.
+
+**Snapshots store the live tapes (2026-10-27).** `results.
+build_deformed_struc_geometry(..., bridle_rest_lengths=)` takes the live
+bridle rest lengths (readers' element order: bridle_connections rows, a pulley
+as two arms); both drivers pass them (`structural_wireframe.get_rest_lengths`,
+`structural_billow.get_rest_lengths`). Before, every rest length was copied
+from the INPUT geometry, so a snapshot written after a tape actuation recorded
+the tape as it was BEFORE the step while its nodes were the solved shape after
+it (one tape step stale in every chain snapshot; `sim_output.h5` was always
+right, and `starting_from_sim_subdir` continuations read it). A line whose
+connections share one live value gets it in its `bridle_lines` row; one whose
+connections differ (the two steering tapes of a steered state) gets their mean
+there and each connection in the optional top-level block
+`bridle_connection_rest_lengths` (`{headers: [row, l0], data: [[bridle_connections
+row, l0], ...]}`, `utils.BRIDLE_CONNECTION_REST_LENGTHS`), which both geometry
+readers apply (`utils.bridle_connection_rest_lengths`). Pulley ropes keep their
+input row: never actuated, and the backends report their arms differently.
 
 **Trim-state history / unloaded-branch reference (2026-09-10).** The coupled
 solver's meta now carries `opt_x_history` — the trim state

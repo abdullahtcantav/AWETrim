@@ -116,6 +116,7 @@ field; everything else has a default:
 | `depower` | `{"mode":"optimize"}` | whether depower is optimized and how, see [Depower](#depower--read-this-before-flying-a-returned-path) |
 | `min_turn_radius` | none | minimum physical turn radius [m] the path must respect, see [Minimum turn radius](#minimum-turn-radius--if-your-kite-cannot-turn-as-tightly-as-the-optimizers) |
 | `pattern_limits` | none | box on where the path may go, in degrees: `{azimuth_max, elevation_min, elevation_max, azimuth_amplitude_min}`, see [Pattern limits](#pattern-limits--keeping-the-optimizer-out-of-shapes-you-do-not-want) |
+| `angle_of_attack_limits` | none (0–14°) | bounds on the angle of attack in degrees, `{min, max, stall_margin}`, see [Angle-of-attack limits](#angle-of-attack-limits--when-the-rom-trims-outside-014) |
 
 `input_depower`, `reg_weight` and `detect_simple_bounds` are the complete set
 of solver knobs `InitParams` exposes; there is no generic overrides dict.
@@ -229,6 +230,27 @@ defaults). `POST /step` accepts the struct too: omit = keep, a struct replaces
 the limits as a whole, `{}` clears them. Purely shape limits — the kite model
 is unchanged — and the normal optimum (figures of ~25–35° half-width at 20–35°
 elevation) is well inside the defaults, so they only act on the bad basins.
+
+### Angle-of-attack limits — when the ROM trims outside 0–14°
+
+The optimizer keeps the angle of attack between 0° and 14° at every node by
+default. That box was set for the LEI-V3 ROMs, and the angle is each ROM's own:
+a ROM that measures it from another reference chord trims at other values for
+the same lift. A ROM whose depowered trim sits below 0° then cannot depower in
+strong wind, and the solve fails there (IPOPT reports local infeasibility, with
+the angle of attack on its 0° bound). Send the bounds the ROM needs:
+
+```json
+{"angle_of_attack_limits": {"min": -3, "stall_margin": 3}}
+```
+
+All fields in **degrees**, all optional (an omitted side keeps the default).
+`min` / `max` bound the angle at every node; `stall_margin` replaces `max` with
+the ROM's stall angle (`aerodynamics.params.angle_of_attack_stall`) minus the
+margin, so the ceiling follows the ROM in use (send `max` or `stall_margin`, not
+both). Both replies echo the limits in force (`angle_of_attack_limits`, `null` =
+defaults). `POST /step` accepts the struct too: omit = keep, a struct replaces
+the limits as a whole, `{}` returns to the defaults.
 
 The trajectory you send is only a starting shape — the optimizer reshapes the
 curve freely; a rough guess is fine.
@@ -346,15 +368,18 @@ Add `"wait": false` to get the old asynchronous behavior instead
 - `PatternLimits {azimuth_max, elevation_min, elevation_max,
   azimuth_amplitude_min}` [deg], all optional — a box on where the path may
   go plus an azimuth-amplitude floor; see the pattern-limits section above.
+- `AngleOfAttackLimits {min, max, stall_margin}` [deg], all optional —
+  bounds on the angle of attack; see the angle-of-attack section above.
 - `InitParams {name, length, winch_params, inflow_conditions, trajectory,
   input_depower, reg_weight, detect_simple_bounds, depower, min_turn_radius,
-  pattern_limits}` — the `/init` request and reply carry these fields (reply
+  pattern_limits, angle_of_attack_limits}` — the `/init` request and reply carry these fields (reply
   trajectory = fitted starting path, `inflow_conditions` echoed with the
   defaults filled in, `depower` echoed as mode + starting value). `length` is
   the initial tether length; the three solver knobs default to `1.6`, `1.0`
-  and `true`; `depower`, `min_turn_radius` and `pattern_limits` are optional.
+  and `true`; `depower`, `min_turn_radius`, `pattern_limits` and
+  `angle_of_attack_limits` are optional.
 - `StepParams {length, winch_params, trajectory, depower, min_turn_radius,
-  pattern_limits}` — the `/step` request and reply, `length` being the
+  pattern_limits, angle_of_attack_limits}` — the `/step` request and reply, `length` being the
   current tether length; on the reply `depower` is the setting the optimized
   path assumes, `min_turn_radius` the limit and `pattern_limits` the box it
   was optimized under.
