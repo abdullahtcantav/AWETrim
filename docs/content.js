@@ -195,8 +195,8 @@ const CONTENT = {
   },
   "trajectory-parametrization": {
     title: "Trajectory Optimisation",
-    text: "Trajectory optimisation runs on the reduced-order model. The parametrisation defines the flight path in the shared course frame using B-spline path patterns, whose control points and parameters become the optimisation variables for power-cycle analysis (Cayon, van Deursen & Schmehl, WES 2026; Cayon & Schmehl, Torque 2026). A full pumping cycle can be represented in two ways: as a single periodic B-spline closing the whole cycle, or by splitting it into a parametrised reel-out production phase — downloop, uploop or helix — followed by a simplified reel-in phase. Only the split reel-out / simplified reel-in representation is currently implemented.",
-    bullets: ["B-spline path patterns in the course frame as optimisation variables", "Whole cycle as a single periodic B-spline", "Or split into a parametrised reel-out (downloop/uploop/helix) + simplified reel-in — the only one currently implemented"],
+    text: "Trajectory optimisation runs on the reduced-order model. The parametrisation defines the flight path in the shared course frame using B-spline path patterns, whose control points and parameters become the optimisation variables for power-cycle analysis (Cayon, van Deursen & Schmehl, WES 2026; Cayon & Schmehl, Torque 2026). A full pumping cycle can be represented in two ways: as a single periodic B-spline closing the whole cycle, or by splitting it into a parametrised reel-out production phase — downloop, uploop or helix — followed by a simplified reel-in phase. Both representations are implemented.",
+    bullets: ["B-spline path patterns in the course frame as optimisation variables", "Whole cycle as a single periodic B-spline (run_full_cycle_opti.py)", "Or split into a parametrised reel-out (downloop/uploop/helix) + simplified reel-in"],
     image: "img/b-spline.png",
     caption: "B-spline parametrisation of a crosswind figure-of-eight in the azimuth–elevation (φ, β) plane: a periodic B-spline (orange) with its control points (blue) reproduces the baseline Lissajous pattern (black).",
     links: [PAPER_ROM, PAPER_OPT, REPO_AWETRIM]
@@ -215,14 +215,15 @@ const CONTENT = {
   },
   "operational-optimization": {
     title: "Operational Optimization",
-    text: "Public ROM scripts simulate and optimise full pumping cycles. run_cycle_simulation.py stitches a reel-out production loop, a reel-in phase and the transition into one CycleSimple, and with --optimize searches the path and control parameters that maximise cycle power (CasADi Opti / IPOPT) subject to the operational limits. Reel-out patterns — downloop, uploop and helix — and a standalone reel-in optimisation are available as separate entry points.",
+    text: "Public ROM scripts optimise full pumping cycles. run_full_cycle_opti.py represents the whole cycle (reel-out figures of eight, reel-in and transition) as one periodic B-spline, closed across the period seam, and maximises mean cycle power over the path, the reel-out speed and the steering and depower inputs (CasADi Opti / IPOPT). The same limits apply to every cycle: height band, minimum turn radius, tether-force and winch-speed bounds, and an angle-of-attack margin below stall. Reel-out patterns (downloop, uploop and helix) are also available as separate entry points.",
     bullets: [
-      "Full pumping cycle: reel-out → reel-in → transition (run_cycle_simulation.py)",
-      "Reel-out patterns (downloop / uploop / helix) and standalone reel-in",
-      "Cycle-power maximisation over path & control parameters (CasADi Opti / IPOPT)"
+      "Full pumping cycle as a single periodic B-spline (run_full_cycle_opti.py)",
+      "Mean-power maximisation over path, reel-out speed, steering and depower (CasADi Opti / IPOPT)",
+      "Different pattern topologies compared under the same limits",
+      "Reel-out patterns (downloop / uploop / helix) as separate entry points"
     ],
-    image: "img/pumping-cycle-trajectory.png",
-    caption: "Simulated LEI-V3 pumping cycle: downloop reel-out (blue), reel-in (orange) and transition (green), produced by run_cycle_simulation.py.",
+    image: "img/three-cycle-trajectories.png",
+    caption: "Optimised LEI-V3 pumping cycles at 10 m/s at 100 m (logarithmic profile, z0 = 0.03 m), coloured by reel-out speed v_r, all under the same limits (height 40-400 m, turn radius ≥ 25 m). Left: multi-lobe cycle, 6.72 kW. Middle: slanted up-loop figure eight, 6.06 kW. Right: symmetric figure eight, 4.76 kW. The dashed line is the initial guess.",
     links: [PAPER_OPT, REPO_AWETRIM]
   },
   "performance-assessment": {
