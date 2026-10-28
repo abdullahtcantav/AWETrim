@@ -43,7 +43,7 @@ import numpy as np
 import yaml
 from scipy.signal import find_peaks
 
-from cycle_kites import DEFAULT_KITE, SEED_FILENAME, resolve_kite
+from cycle_kites import DEFAULT_KITE, SEED_FILENAME, override_wind, resolve_kite
 from cycle_kites import wind_tag as _wind_tag
 
 from awetrim.environment.wind_factory import create_wind_model
@@ -113,10 +113,10 @@ configure_kite(DEFAULT_KITE)
 # optimizer quietly opens the cycle: the power reward for reeling out forever
 # beats any finite penalty (exterior penalty is exact only as w -> inf), the
 # radius runs away, and the per-node trim blows up (objective -> -6, inf_pr
-# explodes). The hard equality makes the runaway simply infeasible. (A soft
-# closure round -- target "zero", closure_weight ~1e5, hard_close off -- is
-# only needed when the seed itself is OPEN; fit_periodic_cycle_config.py now
-# emits closed trim-feasible seeds, so no feasibility round is staged.)
+# explodes). The hard equality makes the runaway simply infeasible. The seed
+# is generally OPEN (its forward simulation marches the seed's force law,
+# which free_speed drops), so the first stage is a pure feasibility round
+# with the hard closure, and the power rounds start from a closed point.
 #
 # Step control is PROXIMAL, not boxed: ``trust_region_weight`` adds
 # w * sum(((p - p_warmstart) / scale)^2) to the objective, with scale = the
@@ -137,6 +137,28 @@ configure_kite(DEFAULT_KITE)
 # polish keeps the old tight box; warm-started from the main optimum it
 # should sit strictly inside it.
 STAGES = [
+    # Feasibility first: the seed's forward simulation marches the seed's
+    # force law and is generally OPEN (the free_speed NLP drops that law), so
+    # the first solve only projects it onto the closed, trimmed set -- the
+    # objective is the proximal anchor alone ("zero" target), i.e. the
+    # smallest move that closes the cycle. Climbing the power ridge from an
+    # infeasible start overshoots into regions the trim cannot hold. The
+    # depower profile is HELD at the seed's (fix_depower): a free profile has
+    # no productivity incentive in this round and closes the cycle by reeling
+    # in fully powered, which the power round can only undo through large
+    # moves (failed at 8 m/s at 100 m); held, the round closes the cycle
+    # through the free reel speed and the shape.
+    {
+        "label": "close | feasibility, proximal anchor only",
+        "params": ["C_phi", "C_beta", "r0"],
+        "target": "zero",
+        "fix_depower": True,
+        "closure_weight": 0.0,
+        "hard_close": True,
+        "warm_start": False,
+        "trust_region_weight": 0.05,
+        "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 50.0},
+    },
     # ``r0`` frees the operating radius: the NLP's node-0 radius pin follows
     # the r0 parameter (seeded from path_parameters["r0"], bounded by
     # DEFAULT_OPTI_LIMITS["r0"]) and the hard closure r[-1] == r[0] drags the
@@ -150,8 +172,8 @@ STAGES = [
         # bound width) costs a few % of the O(1) scaled power objective.
         # Raise it if the topology-signature warning fires; lower it if the
         # polish stage still moves the shape far.
-        "warm_start": False,  # no anchor on the seed, just the trust region
-        "trust_region_weight": 0.05,
+        "warm_start": True,  # tight-barrier start from the closed point
+        "trust_region_weight": 0.2,
         "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 50.0},
         "repeat": 1,  # old scheme: 4 passes, re-centered each time; new scheme: 1 pass
     },
@@ -523,16 +545,23 @@ def main(
     run_tag: str = "",
     skip_validation: bool = False,
     stage_repeats: int = None,
+    wind_speed: float = None,
+    wind_height: float = None,
 ) -> int:
     """``config_path`` overrides the kite's seed YAML (a variant such as the
     same seed with ``winch_mode: force_law``); ``run_tag`` is appended to the
-    output filenames so variants do not overwrite each other."""
+    output filenames so variants do not overwrite each other. ``wind_speed``
+    (m/s at ``wind_height``, default the profile's reference height) replaces
+    the profile wind's amplitude, keeping its law (``cycle_kites.override_wind``);
+    the seed must have been generated at the same wind."""
+    global WIND_CONFIG
     configure_kite(kite or KITE_DIR)
+    WIND_CONFIG = override_wind(WIND_CONFIG, wind_speed, wind_height)
     print(f"Kite: {KITE_NAME} ({KITE_CONFIG_PATH}); wind: {describe_wind()}")
     if stage_repeats:
         # Re-centred passes of the main stage (the old sequential scheme):
         # the remedy when a run ends with the backstop step box active.
-        STAGES[0]["repeat"] = int(stage_repeats)
+        STAGES[1]["repeat"] = int(stage_repeats)
     reelout_config = load_reelout_config(config_path or CYCLE_CONFIG_PATH)
     if skip_validation:
         # Continuation from an OPTIMIZED config (a previous run's output): its
@@ -595,6 +624,7 @@ def main(
             # optimized shape/winch back into the config and advances start_state.
             sim["radial_closure_weight"] = float(stage["closure_weight"])
             sim["close_radial_cycle"] = bool(stage["hard_close"])
+            sim["fix_depower_profile"] = bool(stage.get("fix_depower", False))
             step_bounds = stage.get("step_bounds") or {}
             target = stage.get("target", "power")
             repeats = int(stage.get("repeat", 1))
@@ -744,6 +774,19 @@ if __name__ == "__main__":
         "(re-runs the stages from it, seed validation skipped) -- use when "
         "the previous run ended with the backstop step box active",
     )
+    parser.add_argument(
+        "--wind-speed",
+        type=float,
+        default=None,
+        help="Wind speed (m/s) at --wind-height replacing the profile's "
+        "amplitude (law and z0 kept); the seed must be generated at the same wind",
+    )
+    parser.add_argument(
+        "--wind-height",
+        type=float,
+        default=None,
+        help="Height (m) of --wind-speed (default the profile's height_ref)",
+    )
     args = parser.parse_args()
     exit_code = main(
         run_plots=args.plot,
@@ -753,6 +796,8 @@ if __name__ == "__main__":
         run_tag=args.tag,
         skip_validation=args.continue_from is not None,
         stage_repeats=args.stage_repeats,
+        wind_speed=args.wind_speed,
+        wind_height=args.wind_height,
     )
     if args.plot:
         import matplotlib.pyplot as plt

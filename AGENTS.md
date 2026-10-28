@@ -99,7 +99,16 @@ src/awetrim/
                          together, so with the mirror rows those rows are
                          dependent and their multipliers not unique; the
                          clean fix is elimination (declare only the first
-                         half as variables) -- open follow-up)
+                         half as variables) -- open follow-up.
+                         sim_parameters.fix_depower_profile: per-node depower
+                         held at its warm start (the full-cycle closing
+                         stage). sim_parameters.parametric_speed_floor: the
+                         anti-hesitation floor sigma' >= f sigma_ref without a
+                         turn-radius constraint (the full-cycle seeds emit
+                         0.2; a collapsed sigma' is a spline cusp that breaks
+                         the node trim). The power objective's scale is
+                         floored at 0.25 mean|P| of the warm start. All
+                         opt-in keys off = NLP unchanged)
   environment/       ✅  Wind (uniform / logarithmic / power_law / explog /
                          jet / tabulated). profile_laws.py is the ONLY place the
                          analytic formulas live (pure functions over an ``xp``
