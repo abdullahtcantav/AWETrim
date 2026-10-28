@@ -1886,6 +1886,21 @@ class PhaseParameterized(TimeSeries):
             init_values = np.asarray(values) / init_scales.get(var_name, 1.0)
             opti.set_initial(raw_init_vars[var_name], init_values)
 
+        # Optional: hold the per-node depower profile at its warm start
+        # (``sim_parameters["fix_depower_profile"]``). A feasibility round
+        # with a free profile has no productivity incentive and closes the
+        # cycle by reeling in fully powered, a point the power round can only
+        # leave through large moves; pinned, it closes through the reel speed
+        # and the shape. Off (absent/False): the NLP is unchanged.
+        if optimize_depower_profile and bool(sim_params.get("fix_depower_profile", False)):
+            if "input_depower" not in warm_starts:
+                raise ValueError("fix_depower_profile needs a depower warm start")
+            opti.subject_to(
+                opti_vars["input_depower"]
+                == ca.DM(np.asarray(warm_starts["input_depower"], dtype=float))
+            )
+            print("Depower profile held at its warm start (fix_depower_profile)")
+
         # Fix initial radius (constrain the scaled decision so the row stays
         # O(1)). With ``r0`` as a named optimization parameter the pin follows
         # the symbol instead of the numeric start state: the operating radius
@@ -2133,12 +2148,33 @@ class PhaseParameterized(TimeSeries):
             raise ValueError(
                 "sim_parameters['turn_radius_sigma_floor'] must be in [0, 1)"
             )
+        # The same anti-hesitation floor on its own, without a turn-radius
+        # constraint (``sim_parameters["parametric_speed_floor"]``, a fraction
+        # of sigma_ref; None/0 -> off, the NLP is unchanged). Without it the
+        # optimizer can collapse sigma' at one node (the full-cycle LEI-V3
+        # optimum had sigma' = 0.07 at the reel-in exit with s_dot 2.6), and a
+        # step past zero is a true cusp: the path reverses, the node's trim
+        # breaks (AoA ~146 deg seen) and IPOPT ends in restoration. Ignored
+        # when min_turn_radius is set (turn_radius_sigma_floor applies).
+        parametric_speed_floor = float(sim_params.get("parametric_speed_floor") or 0.0)
+        if not 0.0 <= parametric_speed_floor < 1.0:
+            raise ValueError(
+                "sim_parameters['parametric_speed_floor'] must be in [0, 1)"
+            )
+        if min_turn_radius > 0.0:
+            parametric_speed_floor = 0.0
         _sigma_ref = 1.0  # typical unit-sphere arc rate sigma' of the pattern
         if min_turn_radius > 0.0:
             print(
                 f"NLP turn-radius constraint: R >= {min_turn_radius:g} m on "
                 f"{turn_radius_subsamples} sample(s) per node interval"
             )
+        elif parametric_speed_floor > 0.0:
+            print(
+                f"NLP parametric-speed floor: sigma' >= {parametric_speed_floor:g} "
+                f"sigma_ref on {turn_radius_subsamples} sample(s) per node interval"
+            )
+        if min_turn_radius > 0.0 or parametric_speed_floor > 0.0:
             # sigma' scale from the numeric starting pattern: angular path
             # length of one pass over [s0, s1] divided by the s-span.
             try:
@@ -2430,7 +2466,14 @@ class PhaseParameterized(TimeSeries):
         E0 = float(np.sum(P_hist[:-1] * dt_hist))  # left Riemann sum
         T0 = float(np.sum(dt_hist))
         P0 = E0 / (T0 + 1e-12)
-        P_scale = max(abs(P0), 1.0)
+        # Floor by the typical power MAGNITUDE: on a closed cycle the net
+        # power can nearly cancel (a warm start that only closes the cycle
+        # sits near 0 W), and a scale of a few watts makes the power objective
+        # dwarf the trust region and the constraints -- IPOPT then trades
+        # trim violation for "power" and ends in restoration. Unchanged
+        # whenever |P0| >= 0.25 mean|P| (reel-out phases, ordinary seeds).
+        P_abs_mean = float(np.sum(np.abs(P_hist[:-1]) * dt_hist)) / (T0 + 1e-12)
+        P_scale = max(abs(P0), 0.25 * P_abs_mean, 1.0)
 
         # --- Auto scales from warm start (robust to outliers)
         def _scale(x, floor=1.0):
@@ -2666,6 +2709,9 @@ class PhaseParameterized(TimeSeries):
                             dsigma_ik / _sigma_ref >= turn_radius_sigma_floor
                         )
                         _rep_sigma.append(dsigma_ik / _sigma_ref)
+                elif parametric_speed_floor > 0.0:
+                    opti.subject_to(dsigma_ik / _sigma_ref >= parametric_speed_floor)
+                    _rep_sigma.append(dsigma_ik / _sigma_ref)
 
         if periodic_wrap:
             # Seam interval [s_grid[N-1], s_grid[N]] -> node 0: the same
@@ -2979,7 +3025,12 @@ class PhaseParameterized(TimeSeries):
             _report_ineq(
                 "path_param_speed (sigma'/ref)",
                 ca.vertcat(*_rep_sigma),
-                (turn_radius_sigma_floor, np.inf),
+                (
+                    turn_radius_sigma_floor
+                    if min_turn_radius > 0.0
+                    else parametric_speed_floor,
+                    np.inf,
+                ),
                 "-",
             )
 

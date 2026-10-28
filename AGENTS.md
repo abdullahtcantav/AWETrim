@@ -99,7 +99,16 @@ src/awetrim/
                          together, so with the mirror rows those rows are
                          dependent and their multipliers not unique; the
                          clean fix is elimination (declare only the first
-                         half as variables) -- open follow-up)
+                         half as variables) -- open follow-up.
+                         sim_parameters.fix_depower_profile: per-node depower
+                         held at its warm start (the full-cycle closing
+                         stage). sim_parameters.parametric_speed_floor: the
+                         anti-hesitation floor sigma' >= f sigma_ref without a
+                         turn-radius constraint (the full-cycle seeds emit
+                         0.2; a collapsed sigma' is a spline cusp that breaks
+                         the node trim). The power objective's scale is
+                         floored at 0.25 mean|P| of the warm start. All
+                         opt-in keys off = NLP unchanged)
   environment/       ✅  Wind (uniform / logarithmic / power_law / explog /
                          jet / tabulated). profile_laws.py is the ONLY place the
                          analytic formulas live (pure functions over an ``xp``
@@ -137,6 +146,10 @@ src/awetrim/
                          (init/step; echoed) -> opti_limits_override C_phi/
                          C_beta (B-spline hull) + sim_parameters.
                          min_azimuth_amplitude (one smooth row in opti_phase).
+                         Optional angle_of_attack_limits {min, max,
+                         stall_margin} [deg] (init/step; echoed) ->
+                         opti_limits_override angle_of_attack; stall_margin
+                         = the ROM's angle_of_attack_stall minus it.
                          Launcher: examples/server/run_reelout_server.py
   flight_data/       ✅  reader of EKF-AWE output (load_flight -> FlightData); raw-log
                          processing and the EKF itself live in EKF-AWE
@@ -186,7 +199,7 @@ commit bad8a9b) and `config_paths.LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG` keeps its
 path so the comparison scripts run on a checkout of it.
 
 Full-cycle optimisation scripts (`optimization/cycle/`): `fit_periodic_cycle_config.py`
-+ `run_full_cycle_opti.py` (multi-lobe cycle, `close_radial_cycle`). Studies
++ `run_full_cycle_opti.py` (multi-lobe cycle; closed through the `periodic_wrap` seam, the closing stage uses the one-sided `close_radial_cycle` pin; step boxes ±0.15 rad / ±50 m in the closing stage, 4x that in the power stage and polish; `--step-scale` scales the latter). Studies
 built on them live in `optimization/studies/` (see its README), e.g.
 `run_uploop_eight_opti.py` + `plot_uploop_eight_comparison.py` (ONE slanted up-loop figure eight per period: low lobe
 + crossings reel out, high arc reels in; `periodic_wrap`, `free_speed`, free
@@ -356,7 +369,7 @@ Scripts
 
  - Scripts live in `examples/` and are executed from the project root, for example:
    - python examples/2_aerostructural/run_simulation_PSM.py
-   - python examples/1_design/solve_single_state.py
+   - python examples/1_aerodynamics/solve_single_state.py
    - python run_analysis_ekf.py   (available on request)
 
 External dependencies referenced by `pyproject.toml` (VCS installs):
@@ -381,7 +394,7 @@ Notes
 Each kite under `data/<kite_name>/` should include at minimum the following files and folders so scripts and tools can locate inputs automatically:
 
 - `system.yaml` — hardware and system-level configuration (kite mass, KCU, tether properties, winch, mass/inertia). This is the primary source for `SystemModel` properties. **KCU mass is the single source of truth here** (`components.kite.control_system.structure.mass`); both the structural KCU node mass and the QSM `mass_kcu` are resolved from it. **The winch drive envelope is the single source of truth here too** (`components.ground_station.drums[0]`: `min_tether_speed` / `max_tether_speed` / `max_winch_acceleration` / `max_tether_force`); `factory._extract_hardware_limits` maps it onto the optimizer's `speed_radial` bounds and the `winch_acceleration` slew limit, so cycle configs must not restate it.
-- `struc_geometry.yaml` — structural geometry describing wing nodes, LE/TE positions, bridle nodes and connectivity, spring/rest-length definitions, pulley info. A `bridle_lines` row may carry an optional `w` (flat-tape width [m]); `d` then stays the AREA-equivalent diameter used for mass and EA, while the drag uses the projected width (`awetrim.aerodynamics.line_drag`). Does **not** carry `kcu_mass` (deprecated; ignored with a warning if present — set it in `system.yaml`).
+- `struc_geometry.yaml` — structural geometry describing wing nodes, LE/TE positions, bridle nodes and connectivity, spring/rest-length definitions, pulley info. A `bridle_lines` row may carry an optional `w` (flat-tape width [m]); `d` then stays the AREA-equivalent diameter used for mass and EA, while the drag uses the projected width (`awetrim.aerodynamics.line_drag`). Does **not** carry `kcu_mass` (deprecated; ignored with a warning if present — set it in `system.yaml`). A deformed snapshot may carry an optional `bridle_connection_rest_lengths` block (per-connection rest lengths of actuated tapes, e.g. a steered state, where both steering tapes share one `bridle_lines` row); both geometry readers apply it.
 - `aero_geometry.yaml` — VSM aerodynamic geometry describing wing sections, paneling, and references to airfoil polars; may reference a subfolder with airfoil `.dat` or polar CSVs.
 - `as_config.yaml` (or `aerostructural_configs/config.yaml`) — aerostructural solver settings (time-step, tolerances, actuation options, initialisation flags).
 - `rom_config*.yaml` — reduced-order aerodynamic coefficient definitions (one file per ROM; `system.yaml` `models.reduced_order.aerodynamics` names the one in use, else a sibling `rom_config.yaml` is used) (plus ROM tether settings) used by ROM or identification flows. A `controls.input_depower: {powered, depowered}` block states the depower band the ROM was identified on, in the ROM's own `u_p` unit (`identification.controls.rom_depower_band`; absent = the V3 power-tape metres 1.7/2.1, but the full-cycle scripts require it). An optional `validity.angle_of_attack_deg: [lo, hi]` states the AoA range the ROM was identified on (the full-cycle optimizer's AoA bound).

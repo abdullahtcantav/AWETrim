@@ -79,7 +79,7 @@ DEFAULT_BOUNDS_LOWER = np.array([-2.0, -15.0, -15.0, -15.0, -5.0], dtype=float)
 DEFAULT_BOUNDS_UPPER = np.array([200.0, 15.0, 15.0, 15.0, 5.0], dtype=float)
 
 
-def _default_vsm_solver(
+def default_vsm_solver(
     reference_point: np.ndarray,
     allowed_error: float = 1e-6,
     gamma_loop_type: str = "base",
@@ -88,6 +88,27 @@ def _default_vsm_solver(
     anderson_max_iterations: int | None = None,
     is_aoa_corrected: bool = False,
 ) -> VsmSolver:
+    """The VSM ``Solver`` every AWETrim quasi-steady trim uses.
+
+    The settings are AWETrim's, stated here rather than inherited from VSM:
+    VSM's own defaults change between versions (``is_aoa_corrected`` flipped
+    to True on VSM develop on 2026-09-17), and the trims, the CasADi panel
+    kernels and every stored result assume the values below. Build a VSM
+    solver through this function whenever its result is compared with a trim;
+    a bare ``Solver()`` follows whichever VSM checkout is installed. Changing
+    a default here changes every trim.
+
+    Args:
+        reference_point: point the moments are taken about [m].
+        allowed_error: inner circulation-loop tolerance.
+        gamma_loop_type: "base" (relaxed Picard), "anderson" or
+            "casadi_newton"; see the notes below.
+        is_with_artificial_viscosity: Li/Gaunaa spanwise artificial viscosity.
+        artificial_viscosity_factor: its factor.
+        anderson_max_iterations: cap of the Anderson attempt (None = VSM's).
+        is_aoa_corrected: force directions from the quarter-chord flow (True)
+            instead of the freestream (False, AWETrim's model).
+    """
     try:
         from VSM.core.Solver import Solver
     except ImportError as exc:  # pragma: no cover - depends on optional package
@@ -153,6 +174,9 @@ def _default_vsm_solver(
         **kwargs,
     )
 
+
+# Former private name, kept for existing callers.
+_default_vsm_solver = default_vsm_solver
 
 def _as_3vector(value: Any) -> np.ndarray:
     vector = np.asarray(value, dtype=float).reshape(-1)
@@ -581,7 +605,7 @@ def solve_vsm_quasi_steady_trim(
         raise ValueError("Each lower bound must be smaller than its upper bound.")
 
     if solver is None:
-        solver = _default_vsm_solver(
+        solver = default_vsm_solver(
             reference_point,
             gamma_tolerance,
             gamma_loop,
@@ -1117,7 +1141,7 @@ def turn_radius_vs_steer_moment(
     x_guess = np.clip(_as_5vector(x_guess, "x_guess"), bounds_lower, bounds_upper)
     roll_axis = _as_3vector(axes.course)
     if solver is None:
-        solver = _default_vsm_solver(_as_3vector(reference_point))
+        solver = default_vsm_solver(_as_3vector(reference_point))
 
     def _solve_one(
         moment: float, warm: np.ndarray
@@ -1300,7 +1324,7 @@ def turn_radius_vs_steering_delta(
     tip_midpoint = _as_3vector(tip_midpoint)
     course_axis = _as_3vector(axes.course)
     if solver is None:
-        solver = _default_vsm_solver(_as_3vector(reference_point))
+        solver = default_vsm_solver(_as_3vector(reference_point))
 
     def _solve_one(delta: float, warm: np.ndarray) -> tuple[dict[str, Any], np.ndarray]:
         theta = roll_angle_from_steering_delta(steering_h, steering_b, delta)
@@ -1616,7 +1640,7 @@ def solve_vsm_qs_trim_with_williams_tether(
     )
 
     if solver is None:
-        solver = _default_vsm_solver(
+        solver = default_vsm_solver(
             reference_point,
             gamma_tolerance,
             gamma_loop,
@@ -3627,7 +3651,7 @@ def compute_vsm_trim_stability_derivatives(
     reference_point = _as_3vector(reference_point)
     x_trim = _as_5vector(x_trim, "x_trim")
     if solver is None:
-        solver = _default_vsm_solver(reference_point)
+        solver = default_vsm_solver(reference_point)
 
     speed_tangential, roll0, pitch0, yaw0, course_rate0 = x_trim
     va_world = trim_result.get("va_vel_world")
@@ -5939,7 +5963,7 @@ def run_vsm_quasi_steady_sweep(
             solver = (
                 solver_factory(reference_point)
                 if solver_factory is not None
-                else _default_vsm_solver(_as_3vector(reference_point))
+                else default_vsm_solver(_as_3vector(reference_point))
             )
             result, body = solve_vsm_quasi_steady_trim(
                 body_aero=build_body(case_values),
@@ -6084,6 +6108,7 @@ __all__ = [
     "AxisDefinition",
     "compute_stability_derivatives",
     "compute_vsm_trim_stability_derivatives",
+    "default_vsm_solver",
     "plot_quasi_steady_sweep_dataframe",
     "plot_vsm_quasi_steady_sweep",
     "quasi_steady_sweep_rows_to_dataframe",

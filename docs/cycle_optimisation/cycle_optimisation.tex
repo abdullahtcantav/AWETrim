@@ -611,10 +611,11 @@ each violation in $s$, and the location selects the lever:
         \SI{0.1}{rad};
   \item steering beyond the slack is handled according to where it occurs
         (Table~\ref{tab:levers});
-  \item an open cycle is closed by the depower depth,
-        $\delta\leftarrow\delta+\Delta r/(\SI{40}{m})$ (measured
-        $\partial\Delta r/\partial\delta\approx\SI{-40}{m}$), and, once fully
-        depowered, by shortening the reel-out fraction $f$.
+  \item an open cycle is \emph{not} a symptom: the seed marches its own
+        force law, which the \code{free\_speed} optimizer drops, and the
+        optimizer's first stage closes the cycle (until 2026-10-28 the tuner
+        chased the gap through the depower depth and the reel-out fraction,
+        levers that barely move it and disturb the trim).
 \end{itemize}
 
 \begin{table}[H]

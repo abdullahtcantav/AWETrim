@@ -19,7 +19,7 @@ History note: this script previously performed dynamic/modal analysis —
 eigenvalue extraction, complex-plane plots, and per-eigenmode animations.
 The project moved to static stability; the full modal version of this file
 is recoverable from git history
-(``git log -- examples/1_design/compute_stability_derivatives.py``).
+(``git log -- examples/1_aerodynamics/compute_stability_derivatives.py``).
 The old ``--stability-frame body`` behaviour, which passed the material
 body axes INTO the linearisation, was removed as well: the Omega_C transport
 construction is only frame-consistent in the course frame, so the

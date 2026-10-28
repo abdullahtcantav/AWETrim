@@ -43,7 +43,7 @@ import numpy as np
 import yaml
 from scipy.signal import find_peaks
 
-from cycle_kites import DEFAULT_KITE, SEED_FILENAME, resolve_kite
+from cycle_kites import DEFAULT_KITE, SEED_FILENAME, override_wind, resolve_kite
 from cycle_kites import wind_tag as _wind_tag
 
 from awetrim.environment.wind_factory import create_wind_model
@@ -113,10 +113,10 @@ configure_kite(DEFAULT_KITE)
 # optimizer quietly opens the cycle: the power reward for reeling out forever
 # beats any finite penalty (exterior penalty is exact only as w -> inf), the
 # radius runs away, and the per-node trim blows up (objective -> -6, inf_pr
-# explodes). The hard equality makes the runaway simply infeasible. (A soft
-# closure round -- target "zero", closure_weight ~1e5, hard_close off -- is
-# only needed when the seed itself is OPEN; fit_periodic_cycle_config.py now
-# emits closed trim-feasible seeds, so no feasibility round is staged.)
+# explodes). The hard equality makes the runaway simply infeasible. The seed
+# is generally OPEN (its forward simulation marches the seed's force law,
+# which free_speed drops), so the first stage is a pure feasibility round
+# with the hard closure, and the power rounds start from a closed point.
 #
 # Step control is PROXIMAL, not boxed: ``trust_region_weight`` adds
 # w * sum(((p - p_warmstart) / scale)^2) to the objective, with scale = the
@@ -131,12 +131,46 @@ configure_kite(DEFAULT_KITE)
 # biases the optimum toward the seed, so a second, warm-started polish stage
 # re-anchors at the main optimum with 10x less weight and shakes the bias out.
 #
-# ``step_bounds`` remains only as a BACKSTOP box (hard +/-delta per solve):
-# the main stage's box is sized to the old scheme's total 4-pass travel
-# budget and should never be active -- the driver warns when it is. The
-# polish keeps the old tight box; warm-started from the main optimum it
-# should sit strictly inside it.
+# ``step_bounds`` is a hard +/-delta box per solve. The closing stage keeps a
+# tight one (+/-0.15 rad, +/-50 m): it needs only a small move, and a wider
+# box let it reshape the pattern or stall locally infeasible. The power and
+# polish boxes are 4x that: a box-scale study (LEI-V3, 7 half-figures, 2026-10-28)
+# found the tight box binding at the optimum and costing 3% of the power at
+# 6-10 m/s at 100 m and 15% at 12 m/s; with this split every case converged
+# without a topology change, at the best power of all variants (1.45 / 8.26 /
+# 11.64 kW at 6 / 10 / 12 m/s). The driver warns when a box is active.
 STAGES = [
+    # Feasibility first: the seed's forward simulation marches the seed's
+    # force law and is generally OPEN (the free_speed NLP drops that law), so
+    # the first solve only projects it onto the closed, trimmed set -- the
+    # objective is the proximal anchor alone ("zero" target), i.e. the
+    # smallest move that closes the cycle. Climbing the power ridge from an
+    # infeasible start overshoots into regions the trim cannot hold. The
+    # depower profile is HELD at the seed's (fix_depower): a free profile has
+    # no productivity incentive in this round and closes the cycle by reeling
+    # in fully powered, which the power round can only undo through large
+    # moves (failed at 8 m/s at 100 m); held, the round closes the cycle
+    # through the free reel speed and the shape.
+    {
+        "label": "close | feasibility, proximal anchor only",
+        "params": ["C_phi", "C_beta", "r0"],
+        "target": "zero",
+        "fix_depower": True,
+        # The one-sided radius pin, not the seam closure: a seed open by tens
+        # of metres ends with steering and reel speed far from node 0, and
+        # closing it while also holding the seam's rate rows was locally
+        # infeasible at 12 m/s at 100 m. The later stages close the seam.
+        "periodic": False,
+        "closure_weight": 0.0,
+        "hard_close": True,
+        "warm_start": False,
+        "trust_region_weight": 0.05,
+        "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 50.0},
+        # This stage needs only a small move; a wider box let it reshape the
+        # pattern (10 m/s at 100 m) or stall locally infeasible (12 m/s), so
+        # --step-scale leaves it alone.
+        "scale_box": False,
+    },
     # ``r0`` frees the operating radius: the NLP's node-0 radius pin follows
     # the r0 parameter (seeded from path_parameters["r0"], bounded by
     # DEFAULT_OPTI_LIMITS["r0"]) and the hard closure r[-1] == r[0] drags the
@@ -150,9 +184,9 @@ STAGES = [
         # bound width) costs a few % of the O(1) scaled power objective.
         # Raise it if the topology-signature warning fires; lower it if the
         # polish stage still moves the shape far.
-        "warm_start": False,  # no anchor on the seed, just the trust region
-        "trust_region_weight": 0.05,
-        "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 50.0},
+        "warm_start": True,  # tight-barrier start from the closed point
+        "trust_region_weight": 0.2,
+        "step_bounds": {"C_phi": 0.6, "C_beta": 0.6, "r0": 200.0},
         "repeat": 1,  # old scheme: 4 passes, re-centered each time; new scheme: 1 pass
     },
     {
@@ -162,7 +196,7 @@ STAGES = [
         "hard_close": True,
         "trust_region_weight": 0.005,
         "warm_start": True,  # tight-barrier IPOPT start from the main optimum
-        "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 100.0},
+        "step_bounds": {"C_phi": 0.6, "C_beta": 0.6, "r0": 400.0},
     },
 ]
 
@@ -412,12 +446,19 @@ def _downsample_n_points(reelout_config, n_points):
     print(f"Downsampled cycle to n_points={int(n_points)}")
 
 
-def _closure_residual(result):
-    """|r[-1] - r[0]| (m) from the optimizer's own trajectory, or None."""
+def _closure_residual(result, periodic=False):
+    """Radial closure (m) from the optimizer's own trajectory, or None.
+
+    ``periodic`` (periodic_wrap): the seam interval's continuity residual
+    |r[N-1] + v_r[N-1] dt_seam - r[0]|; otherwise |r[-1] - r[0]|.
+    """
     traj = getattr(result, "optimized_trajectory", {}) or {}
     r = traj.get("distance_radial")
     if r is None or len(r) < 2:
         return None
+    if periodic and {"s", "s_dot", "speed_radial"} <= set(traj):
+        dt = (1.0 - float(traj["s"][-1])) / max(float(traj["s_dot"][-1]), 1e-9)
+        return float(abs(r[-1] + float(traj["speed_radial"][-1]) * dt - r[0]))
     return float(abs(r[-1] - r[0]))
 
 
@@ -523,16 +564,35 @@ def main(
     run_tag: str = "",
     skip_validation: bool = False,
     stage_repeats: int = None,
+    step_scale: float = None,
+    wind_speed: float = None,
+    wind_height: float = None,
 ) -> int:
     """``config_path`` overrides the kite's seed YAML (a variant such as the
     same seed with ``winch_mode: force_law``); ``run_tag`` is appended to the
-    output filenames so variants do not overwrite each other."""
+    output filenames so variants do not overwrite each other. ``wind_speed``
+    (m/s at ``wind_height``, default the profile's reference height) replaces
+    the profile wind's amplitude, keeping its law (``cycle_kites.override_wind``);
+    the seed must have been generated at the same wind."""
+    global WIND_CONFIG
     configure_kite(kite or KITE_DIR)
+    WIND_CONFIG = override_wind(WIND_CONFIG, wind_speed, wind_height)
     print(f"Kite: {KITE_NAME} ({KITE_CONFIG_PATH}); wind: {describe_wind()}")
     if stage_repeats:
         # Re-centred passes of the main stage (the old sequential scheme):
         # the remedy when a run ends with the backstop step box active.
-        STAGES[0]["repeat"] = int(stage_repeats)
+        STAGES[1]["repeat"] = int(stage_repeats)
+    if step_scale:
+        # The power stages' backstop boxes scaled by one factor (1 = the boxes
+        # above); a stage with scale_box False (the closing stage) keeps its own.
+        for stage in STAGES:
+            if not stage.get("scale_box", True):
+                continue
+            stage["step_bounds"] = {
+                k: float(v) * float(step_scale)
+                for k, v in (stage.get("step_bounds") or {}).items()
+            }
+        print(f"Step boxes scaled x{float(step_scale):g}")
     reelout_config = load_reelout_config(config_path or CYCLE_CONFIG_PATH)
     if skip_validation:
         # Continuation from an OPTIMIZED config (a previous run's output): its
@@ -580,6 +640,7 @@ def main(
     print(baseline_phase.energy_metrics())
 
     if optimize:
+        seed_wrap = bool(sim.get("periodic_wrap", False))
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         tag = wind_tag() + (f"_{run_tag}" if run_tag else "")
         seed_signature = _pattern_signature(reelout_config["path_parameters"])
@@ -594,7 +655,16 @@ def main(
             # warm-starts from the previous one: run_simulation_opti writes the
             # optimized shape/winch back into the config and advances start_state.
             sim["radial_closure_weight"] = float(stage["closure_weight"])
-            sim["close_radial_cycle"] = bool(stage["hard_close"])
+            # A periodic_wrap seed closes the cycle through the seam interval
+            # (last node -> node 0, with its continuity, rates, AoA, energy
+            # and time); the one-sided radius pin would leave the last node
+            # unconstrained and the seam uncounted, and the two exclude each
+            # other. A stage may ask for the pin instead ("periodic": False);
+            # older seeds without the wrap keep the pin throughout.
+            wrap = seed_wrap and bool(stage.get("periodic", True))
+            sim["periodic_wrap"] = wrap
+            sim["close_radial_cycle"] = bool(stage["hard_close"]) and not wrap
+            sim["fix_depower_profile"] = bool(stage.get("fix_depower", False))
             step_bounds = stage.get("step_bounds") or {}
             target = stage.get("target", "power")
             repeats = int(stage.get("repeat", 1))
@@ -637,9 +707,9 @@ def main(
                     aborted = True
                     break
                 result = stage_result
-                res = _closure_residual(result)
+                res = _closure_residual(result, bool(sim.get("periodic_wrap", False)))
                 print(
-                    f"Stage {i + 1}{rep_tag} done. closure |r[-1]-r[0]| = "
+                    f"Stage {i + 1}{rep_tag} done. radial closure = "
                     f"{'n/a' if res is None else f'{res:.2f} m'}"
                 )
                 signature = _pattern_signature(cycle.pattern_config["path_parameters"])
@@ -744,6 +814,26 @@ if __name__ == "__main__":
         "(re-runs the stages from it, seed validation skipped) -- use when "
         "the previous run ended with the backstop step box active",
     )
+    parser.add_argument(
+        "--step-scale",
+        type=float,
+        default=None,
+        help="Scale the power and polish stages' backstop step boxes (C_phi, "
+        "C_beta, r0) by this factor (default 1; the closing stage keeps its box)",
+    )
+    parser.add_argument(
+        "--wind-speed",
+        type=float,
+        default=None,
+        help="Wind speed (m/s) at --wind-height replacing the profile's "
+        "amplitude (law and z0 kept); the seed must be generated at the same wind",
+    )
+    parser.add_argument(
+        "--wind-height",
+        type=float,
+        default=None,
+        help="Height (m) of --wind-speed (default the profile's height_ref)",
+    )
     args = parser.parse_args()
     exit_code = main(
         run_plots=args.plot,
@@ -753,6 +843,9 @@ if __name__ == "__main__":
         run_tag=args.tag,
         skip_validation=args.continue_from is not None,
         stage_repeats=args.stage_repeats,
+        step_scale=args.step_scale,
+        wind_speed=args.wind_speed,
+        wind_height=args.wind_height,
     )
     if args.plot:
         import matplotlib.pyplot as plt
