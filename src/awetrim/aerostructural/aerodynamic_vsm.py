@@ -43,6 +43,7 @@ from awetrim.aerodynamics.vsm_quasi_steady import (
     solve_vsm_qs_trim_with_williams_tether,
     AV_ATTACHED_FIRST as _AV_ATTACHED_FIRST_DEFAULT,
     DEFAULT_TRANSFORMATION_C_FROM_VSM,
+    _as_numeric_3vector,
 )
 
 # Bounds and defaults (aoa, sideslip, course_rate_body)
@@ -61,6 +62,65 @@ roll_bounds = (
 DEFAULT_GUESS_QS = np.array(
     [30.0, 0.0, 0.0, 0.0, -0.0]
 )  # [kite_speed, roll, pitch, yaw, course_rate_body]
+
+#: Mid-span chord angle of attack [deg] a cold trim seed must start in
+#: (``quasi_steady_trim.initial_aoa_band_deg``); see feasible_initial_guess.
+DEFAULT_INITIAL_AOA_BAND_DEG = (0.0, 15.0)
+
+
+def mid_span_chord_angle_of_attack(body_aero, va) -> float:
+    """Signed angle [rad] from the mid-span panel's chord to the apparent
+    wind ``va`` (VSM frame), in the x-z plane: the geometric angle of attack
+    the coupled drivers report, no induced velocity."""
+    panel = body_aero.panels[len(body_aero.panels) // 2]
+    chord = 0.5 * (panel.TE_point_1 + panel.TE_point_2) - 0.5 * (
+        panel.LE_point_1 + panel.LE_point_2
+    )
+    chord_2d = np.array([chord[0], chord[2]]) / np.hypot(chord[0], chord[2])
+    va = np.asarray(va, dtype=float)
+    wind_2d = np.array([va[0], va[2]]) / np.hypot(va[0], va[2])
+    # z-component of the 2-D cross product, written out: np.cross on
+    # 2-element vectors is deprecated since NumPy 2.0.
+    cross = chord_2d[0] * wind_2d[1] - chord_2d[1] * wind_2d[0]
+    return float(np.arctan2(cross, np.clip(np.dot(chord_2d, wind_2d), -1.0, 1.0)))
+
+
+def feasible_initial_guess(
+    body_aero, system_model, speed_bounds, aoa_band_deg=DEFAULT_INITIAL_AOA_BAND_DEG
+) -> np.ndarray:
+    """The cold trim seed: DEFAULT_GUESS_QS when its mid-span chord angle of
+    attack lies in ``aoa_band_deg``, else the same level attitude at the kite
+    speed (inside ``speed_bounds``) that puts it mid-band.
+
+    30 m/s level suits a powered kite, not a slow depowered one, whose real
+    speed is a fraction of it: the seed then meets the wing far below its
+    angle of attack, the first trim residual is not finite and the coupled
+    solve is lost (V3Kite emulation, 3 m/s wind, power tape 2.05 m, real
+    speed 7.9 m/s: mid-span -15 deg, panels to -19, 2026-10-27). Geometric
+    only -- the apparent wind of the trim's own kinematics against the
+    chord, no VSM solve. A seed inside the band is returned unchanged.
+    """
+    guess = np.array(DEFAULT_GUESS_QS, dtype=float)
+    trans = np.asarray(DEFAULT_TRANSFORMATION_C_FROM_VSM, dtype=float)
+    lo, hi = (float(v) for v in aoa_band_deg)
+
+    def aoa_deg(speed):
+        system_model.speed_tangential = float(speed)
+        va = _as_numeric_3vector(system_model, trans @ system_model.velocity_apparent_wind)
+        return np.degrees(mid_span_chord_angle_of_attack(body_aero, va))
+
+    aoa_default = aoa_deg(guess[0])
+    if lo <= aoa_default <= hi:
+        return guess
+    speeds = np.linspace(max(float(speed_bounds[0]), 0.5), float(speed_bounds[1]), 200)
+    aoas = np.array([aoa_deg(s) for s in speeds])
+    guess[0] = speeds[int(np.nanargmin(np.abs(aoas - 0.5 * (lo + hi))))]
+    logging.info(
+        "Cold trim seed moved to %.2f m/s: at %.1f m/s the mid-span chord meets "
+        "the wind at %.1f deg, outside [%g, %g]; now %.1f deg.",
+        guess[0], DEFAULT_GUESS_QS[0], aoa_default, lo, hi, aoa_deg(guess[0]),
+    )
+    return guess
 
 
 #: Trim-state names, for the on-bound diagnostic below.
@@ -698,7 +758,12 @@ def run_vsm_package(
     trim_max_nfev = qs_cfg.get("max_nfev")
     trim_max_nfev = int(trim_max_nfev) if trim_max_nfev else None
     if current_guess is None:
-        current_guess = DEFAULT_GUESS_QS
+        current_guess = feasible_initial_guess(
+            body_aero,
+            system_model,
+            speed_b,
+            qs_cfg.get("initial_aoa_band_deg", DEFAULT_INITIAL_AOA_BAND_DEG),
+        )
     # Which trim solver (quasi_steady_trim.solver, 2026-09-15):
     #   'least_squares' -- the NumPy trims (scipy least_squares over the five
     #                      trim states, a full inner VSM solve per residual

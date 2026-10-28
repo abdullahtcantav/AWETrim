@@ -2057,37 +2057,8 @@ def main(
             )
 
     # print out the geometric angle of attack of the mid panel
-    panels = body_aero.panels
-
-    # Select middle panel
-    mid_idx = len(panels) // 2
-    panel = panels[mid_idx]
-
-    # Midpoints of leading and trailing edges
-    le_mid = 0.5 * (panel.LE_point_1 + panel.LE_point_2)
-    te_mid = 0.5 * (panel.TE_point_1 + panel.TE_point_2)
-
-    # Chord direction vector
-    vec_chord = te_mid - le_mid
-    vec_chord /= np.linalg.norm(vec_chord)
-
-    # Apparent wind direction (normalize)
-    vec_wind = body_aero.va
-    # Project onto plane of interest (optional: usually x-z plane)
-    # Remove spanwise component if needed
-    vec_chord_2d = np.array([vec_chord[0], vec_chord[2]])
-    vec_wind_2d = np.array([vec_wind[0], vec_wind[2]])
-
-    vec_chord_2d /= np.linalg.norm(vec_chord_2d)
-    vec_wind_2d /= np.linalg.norm(vec_wind_2d)
-
-    # Angle between vectors (signed)
-    dot = np.clip(np.dot(vec_chord_2d, vec_wind_2d), -1.0, 1.0)
-    # z-component of the 2-D cross product, written out: np.cross on
-    # 2-element vectors is deprecated since NumPy 2.0.
-    cross = vec_chord_2d[0] * vec_wind_2d[1] - vec_chord_2d[1] * vec_wind_2d[0]
-
-    angle = np.arctan2(cross, dot)
+    mid_idx = len(body_aero.panels) // 2
+    angle = aerodynamic_vsm.mid_span_chord_angle_of_attack(body_aero, body_aero.va)
     alpha_at_ac_mid = np.ravel(results_aero["alpha_at_ac"])[mid_idx]
 
     print(f"alpha = {np.degrees(angle):.2f}° (va vs mid-span chord)")

@@ -1227,6 +1227,24 @@ step swung the kite ~22 deg about the KCU and VSM returned NaN. Same date:
 `_warn_if_trim_on_bounds` takes `rel_tol=1e-3` of the span, since TRF stops
 strictly inside the box (yaw 3.9987 on [-4, 4]) and 1e-6 never fired.
 
+### Cold trim seed (quasi_steady_trim.initial_aoa_band_deg, 2026-10-27)
+
+A trim with no seed (`current_guess=None`: every coupled solve's pre-loop
+trim unless `quasi_steady_initial_guess` is set) starts from
+`aerodynamic_vsm.feasible_initial_guess`: `DEFAULT_GUESS_QS` (30 m/s level)
+when its mid-span chord angle of attack lies in `initial_aoa_band_deg`
+(default [0, 15] deg), else the same level attitude at the kite speed that
+puts it mid-band. Geometric only (the trim's own apparent wind against the
+chord, `mid_span_chord_angle_of_attack`, the angle both drivers print), no
+VSM solve; a seed inside the band is unchanged, so such runs stay
+bit-identical. Why: 30 m/s is a powered kite's speed. A depowered one at a
+fraction of it was met far below its angle of attack (V3Kite emulation, 3 m/s
+wind, power tape 2.05 m, real speed 7.9 m/s: mid-span -15 deg, panels to
+-19), the first trim residual was not finite, the NaN loads threw the
+structure ~22 m and VSM then reported a "folded" lifting line. No trim or
+circulation solver survives that start (least_squares, CasADi, CasADi-Newton
+all failed alike); seeded, the state converges in 8 iterations.
+
 ### Trim solver (quasi_steady_trim.solver, 2026-09-15)
 
 ``least_squares`` (default, every stored result) is the NumPy trim: scipy
