@@ -72,6 +72,21 @@ src/awetrim/aerostructural/
                                    area)
   tracking.py                      setup_tracking_arrays, update_tracking_arrays
   utils.py                         rotate_geometry, calculate_cg, calculate_inertia, load_yaml
+  symmetry.py                      check_mirror_symmetry / warn_if_asymmetric: both
+                                   geometry readers WARN when the geometry they
+                                   return is not mirror-symmetric about y = 0
+                                   (node positions 0.1 mm, rest lengths, stiffness,
+                                   link types, masses); an asymmetric input turns
+                                   an unsteered kite. Expected for a steered
+                                   snapshot; config is_with_symmetry_check: false
+                                   silences it (2026-10-28, after the V3Kite data
+                                   carried a 29 mm short TE wire and mm-asymmetric
+                                   bridle points). Same date: the wireframe reader
+                                   spreads a pulley rope's mass 1/4, 1/2, 1/4 over
+                                   its end, pulley and end nodes, as the full-model
+                                   reader does (it put half on ci and half on cj,
+                                   so the mass followed the row's node order:
+                                   LEI-V3 nodes 36 / 37 had 77 / 25 g)
   logging_config.py                Package-level logging setup
   aerodynamic_vsm.py               VSM body initialisation and run_vsm_package wrapper (shared).
                                    run_frozen_alpha_polar_about_trim: the alpha
