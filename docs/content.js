@@ -130,10 +130,11 @@ const CONTENT = {
       "Spanwise circulation over the deformed wing, panel by panel",
       "Li/Gaunaa artificial viscosity for post-stall regularisation",
       "Anderson-accelerated circulation loop",
-      "Supplies the quasi-steady trim the structure is loaded at"
+      "Supplies the quasi-steady trim the structure is loaded at",
+      "Canopy billowing between the struts as a circular arc of fixed fabric length"
     ],
-    image: "img/aero_comparison.png",
-    caption: "VSM force coefficients against reference data.",
+    image: "img/vsm-billowed-forces.svg",
+    caption: "The LEI-V3 VSM mesh with the canopy billowed between the struts, at a converged coupled state: the total aerodynamic force on each panel (blue) and the aerodynamic force on each bridle-line segment (orange), drawn to separate scales.",
     links: [REPO_VSM, PAPER_VSM, REPO_ML]
   },
   "billow": {
@@ -145,8 +146,8 @@ const CONTENT = {
       "One mapped kernel per element type — 9k DOF solves in ~6 s, mesh-independent iteration count",
       "Validated against the Euler elastica, roll-up, Bathe & Bolourchi, and a measured hanging kite"
     ],
-    image: "img/matched-sweep-shapes.png",
-    caption: "Converged full-fidelity states across the actuation range. Top, across the span: depower rotates every rib's chord, taking the trimmed angle of attack from 11.8° to 4.8°. Bottom, from the front: steering rolls the wing and turns the trim. Canopy triangles carry the membrane's own regime — slack, wrinkled, taut — and about 70% of this canopy is in a tension field at every setting. Billow's own demonstration and validation figures live in its documentation.",
+    image: "img/billow-displacement.svg",
+    caption: "A converged coupled state of the LEI-V3 on Billow's wireframe fidelity, reduced from the full FEM geometry and flying the billowed canopy: the loaded shape coloured by the displacement from the built shape, with the rigid motion removed. The dashed lines are the built leading and trailing edges. Billow's own demonstration and validation figures live in its documentation.",
     links: [REPO_BILLOW, DOCS_BILLOW, PAPER_AERO]
   },
   "model-reduction": {
@@ -197,8 +198,8 @@ const CONTENT = {
     title: "Trajectory Optimisation",
     text: "Trajectory optimisation runs on the reduced-order model. The parametrisation defines the flight path in the shared course frame using B-spline path patterns, whose control points and parameters become the optimisation variables for power-cycle analysis (Cayon, van Deursen & Schmehl, WES 2026; Cayon & Schmehl, Torque 2026). A full pumping cycle can be represented in two ways: as a single periodic B-spline closing the whole cycle, or by splitting it into a parametrised reel-out production phase — downloop, uploop or helix — followed by a simplified reel-in phase. Both representations are implemented.",
     bullets: ["B-spline path patterns in the course frame as optimisation variables", "Whole cycle as a single periodic B-spline (run_full_cycle_opti.py)", "Or split into a parametrised reel-out (downloop/uploop/helix) + simplified reel-in"],
-    image: "img/b-spline.png",
-    caption: "B-spline parametrisation of a crosswind figure-of-eight in the azimuth–elevation (φ, β) plane: a periodic B-spline (orange) with its control points (blue) reproduces the baseline Lissajous pattern (black).",
+    image: "img/three-cycle-trajectories.svg",
+    caption: "Optimised LEI-V3 pumping cycles, each closed by one periodic B-spline, at the same wind and under the same limits, coloured by reel-out speed. Left: multi-lobe cycle. Middle: slanted up-loop figure eight. Right: symmetric figure eight. The dashed line is the initial guess.",
     links: [PAPER_ROM, PAPER_OPT, REPO_AWETRIM]
   },
   "flight-data-processing": {
@@ -214,40 +215,51 @@ const CONTENT = {
     links: [REPO_EKF, PAPER_EKF, PAPER_ROM, REPO_AWETRIM]
   },
   "operational-optimization": {
-    title: "Operational Optimization",
-    text: "Public ROM scripts optimise full pumping cycles. run_full_cycle_opti.py represents the whole cycle (reel-out figures of eight, reel-in and transition) as one periodic B-spline, closed across the period seam, and maximises mean cycle power over the path, the reel-out speed and the steering and depower inputs (CasADi Opti / IPOPT). The same limits apply to every cycle: height band, minimum turn radius, tether-force and winch-speed bounds, and an angle-of-attack margin below stall. Reel-out patterns (downloop, uploop and helix) are also available as separate entry points.",
+    title: "Operating Strategy",
+    text: "Optimising the full pumping cycle at every wind speed gives more than a power number: it says how the system should be flown. Read across the wind range, the optimal cycles show the operating strategy — how fast to reel out and in, which tether force to pull, how much to depower, how high to fly and over which tether lengths — and which operating limit takes over as the wind grows. At low wind the kite flies fully powered and the tether force rises with the wind; once the force reaches its limit the reel-out speed takes up the extra power, and once that is limited too the kite sheds power by depowering and climbing higher in the wind window.",
     bullets: [
-      "Full pumping cycle as a single periodic B-spline (run_full_cycle_opti.py)",
-      "Mean-power maximisation over path, reel-out speed, steering and depower (CasADi Opti / IPOPT)",
-      "Different pattern topologies compared under the same limits",
-      "Reel-out patterns (downloop / uploop / helix) as separate entry points"
+      "Optimal control and flight settings over the wind speed, phase by phase",
+      "Which operating limit binds in each wind range",
+      "Derived from the same optimised cycles as the power curve"
     ],
-    image: "img/three-cycle-trajectories.png",
-    caption: "Optimised LEI-V3 pumping cycles at 10 m/s at 100 m (logarithmic profile, z0 = 0.03 m), coloured by reel-out speed v_r, all under the same limits (height 40-400 m, turn radius ≥ 25 m). Left: multi-lobe cycle, 6.72 kW. Middle: slanted up-loop figure eight, 6.06 kW. Right: symmetric figure eight, 4.76 kW. The dashed line is the initial guess.",
+    image: "img/operating-strategy.svg",
+    caption: "LEI-V3 operating strategy from the optimised pumping cycles over the wind speed: reel-out and reel-in means of the reeling speed, tether force, depower and elevation angle, the tether-length range flown and the cycle duration. Dashed lines are the operating limits.",
     links: [PAPER_OPT, REPO_AWETRIM]
+  },
+  "co-simulation": {
+    title: "Co-simulation",
+    text: "AWETrim can run as a small JSON server next to another simulator. The client describes the kite system, wind and limits once; at every step it reports the current tether length and wind, and the server re-optimises the power-optimal reel-out path from the previous solution and returns it with the reel-out speed and depower it assumes. The simulator keeps flying the previous path while a re-solve runs. Any language can be the client: examples are provided for Julia, MATLAB and Python, and SimpleKiteControllers.jl installs the server directly.",
+    bullets: [
+      "JSON API: /init, /step, /status, /trajectory, /reset (examples/server/)",
+      "Warm-started re-optimisation of the reel-out path at every step",
+      "Client examples in Julia, MATLAB and Python"
+    ],
+    image: "img/co-simulation.svg",
+    caption: "The co-simulation loop between an external kite simulator and the AWETrim server.",
+    links: [REPO_AWETRIM]
   },
   "performance-assessment": {
     title: "Performance Assessment",
-    text: "The same cycle and pattern scripts report the per-phase energy balance and net cycle power, and let you study how power and loads vary with wind speed and configuration across the wind window. The ROM validators close the loop against measurements: validate_quasi_steady_state_v3.py compares the quasi-steady force balance to reconstructed flight data, and validate_spline_v3.py fits B-spline patterns to measured trajectories and replays them with the ROM.",
+    text: "Performance is assessed at two levels. At system level, the full-cycle optimisation is run along the wind speed, each wind continued from the optimum of its neighbour, to give the power curve: the best mean cycle power over the number of figure-eight lobes. At kite level, the coupled VSM–Billow solve gives the loaded, deformed kite, with the aerodynamic load on the canopy and the tension in every bridle line. The ROM validators close the loop against measurements: validate_quasi_steady_state_v3.py compares the quasi-steady force balance to reconstructed flight data, and validate_spline_v3.py replays measured trajectories with the ROM.",
     bullets: [
-      "Per-phase energy balance and net cycle power",
-      "ROM validation vs flight data (validate_quasi_steady_state_v3.py, validate_spline_v3.py)",
-      "Sensitivity of power and loads to wind and configuration"
+      "Power curve from optimised full pumping cycles, continued along the wind speed",
+      "Loaded kite: canopy load and bridle-line tensions from the coupled VSM–Billow solve",
+      "ROM validation vs flight data (validate_quasi_steady_state_v3.py, validate_spline_v3.py)"
     ],
-    image: "img/cycle-power-breakdown.png",
-    caption: "Pumping-cycle energy balance and net power for the LEI-V3 (10 m/s at 100 m), from the ROM cycle simulation.",
-    links: [PAPER_OPT, PAPER_ROM, REPO_AWETRIM]
+    image: "img/performance-assessment.svg",
+    caption: "Left: LEI-V3 power curve, the mean power of optimised pumping cycles for different numbers of figure-eight lobes and the best of them, over the wind speed. Right: the LEI-V3 under load at the centre of the wind window, canopy shaded by the aerodynamic load and bridle lines by tension.",
+    links: [PAPER_OPT, PAPER_ROM, REPO_AWETRIM, REPO_BILLOW]
   },
   "design-analysis": {
-    title: "Design and Model Analysis",
-    text: "Public aerodynamics scripts turn the framework into a design tool. parametric_shapes/generate_shape_variations.py morphs the wing planform — aspect ratio, anhedral, taper, twist — and re-evaluates each variant with VSM, while optimize_lei_airfoil.py tunes the LEI airfoil with the ML regression model. compute_stability_derivatives.py finite-differences the VSM trim to obtain the aerodynamic stability derivatives, then extracts and animates the longitudinal and lateral flight-dynamic eigenmodes.",
+    title: "Kite Design",
+    text: "The parametric geometry turns the framework into a design tool for different kite types. A leading-edge-inflatable kite such as the LEI-V3 is morphed from its baseline (aspect ratio, anhedral, taper, twist, sweep), a ram-air kite is built from its ribs, and rigid swept or three-panel wings are generated from a handful of scalar parameters. Each candidate is trimmed with VSM, and compute_stability_derivatives.py finite-differences that trim to obtain the aerodynamic stability derivatives and the longitudinal and lateral flight-dynamic eigenmodes.",
     bullets: [
-      "Parametric wing-planform & LEI-airfoil studies (parametric_shapes/ (available on request))",
-      "Aerodynamic stability derivatives and animated flight-dynamic eigenmodes",
-      "Configuration comparison and model validation against flight data"
+      "Kite types: leading-edge inflatable, ram-air, swept and three-panel rigid wings",
+      "Parametric morphing of the planform and LEI-airfoil studies",
+      "Aerodynamic stability derivatives and flight-dynamic eigenmodes of each design"
     ],
-    image: "img/3d-wing-design.png",
-    caption: "Parametric wing-planform variations (aspect ratio and anhedral) from generate_shape_variations.py.",
+    image: "img/kite-design.svg",
+    caption: "Four kite types from the parametric geometry: the LEI-V3, the SK160 ram-air wing (Thedens 2022), and two aircraft-like rigid wings, one swept and one cranked three-panel.",
     links: [PAPER_AERO, PAPER_VSM, REPO_AWETRIM]
   }
 };
