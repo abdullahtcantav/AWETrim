@@ -77,6 +77,22 @@ def test_trim_summary_reads_both_meta_layouts():
         assert rows["Total mass"] == 3.0
 
 
+def test_trim_summary_rom_coefficients_use_the_case_density():
+    from awetrim.environment.profile_laws import air_density
+
+    nodes = np.zeros((3, 3))
+    config = {"rho": 1.225, "air_density_law": "exponential", "height_gnd": 1500.0,
+              "angle_elevation_deg": 30.0, "distance_radial": 200.0}
+    trim = {"Umag": 20.0, "total_aero_force_vec": [50.0, 0.0, 500.0],
+            "va_vel_world": [20.0, 0.0, 0.0]}
+    case = {"initial": nodes, "final": nodes, "tracking": {}, "config": config,
+            "view": {"reference_area_rom": 20.0},
+            "meta": {"trim_results": trim, "converged": True, "n_iter": 1}}
+    rows = {label: value for _, label, value, _ in case_view.trim_summary(case)}
+    rho = air_density(200.0 * np.sin(np.radians(30.0)), 1.225, height_gnd=1500.0)
+    assert rows["CL (ROM area 20.00 m2)"] == pytest.approx(500.0 / (0.5 * rho * 20.0**2 * 20.0))
+
+
 def test_format_summary_groups_rows():
     text = case_view.format_summary([("A", "x", 1.0, "m"), ("A", "y", float("nan"), ""),
                                      ("B", "z", "yes", "")])

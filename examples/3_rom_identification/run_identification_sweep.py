@@ -69,7 +69,7 @@ import pandas as pd
 
 from awetrim.aerostructural import aerodynamic_vsm
 from awetrim.aerostructural.billow.driver import merge_config
-from awetrim.aerostructural.case import resolve_kite_paths
+from awetrim.aerostructural.case import air_density_at_case, resolve_kite_paths
 from awetrim.aerostructural.results import save_sim_output
 from awetrim.aerostructural.utils import load_yaml
 from awetrim.identification import aerostructural_dataset as ds
@@ -261,7 +261,7 @@ def anchor_rows(chain: Chain, index: int, prepared, config: dict, meta: dict,
         wind_speed=chain.wind_speed,
         power_tape_length=prepared.power_tape_length,
         steering_half_difference=prepared.steering_half_difference,
-        rho=float(config["rho"]), mass_kcu=float(m_arr[0]),
+        rho=air_density_at_case(config), mass_kcu=float(m_arr[0]),
         mass_total=float(m_arr.sum()), trim=trim, meta=meta,
         body_z=aerodynamic_vsm.body_centre_panel_axes(body)[2],
         polar_check=float(np.linalg.norm(f_zero - f_trim) / np.linalg.norm(f_trim)),

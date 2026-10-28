@@ -487,9 +487,14 @@ def test_angle_of_attack_stall_margin_uses_the_rom_stall_angle(client, monkeypat
     monkeypatch.setattr(
         session_mod,
         "create_system_model_from_yaml",
-        lambda yaml_path: SimpleNamespace(
+        lambda yaml_path, **kwargs: SimpleNamespace(
             wind=None,
-            kite=SimpleNamespace(aero_params={"angle_of_attack_stall": alpha_stall}),
+            rho=1.225,
+            kite=SimpleNamespace(
+                rho=1.225,
+                air_density_model=None,
+                aero_params={"angle_of_attack_stall": alpha_stall},
+            ),
         ),
     )
     payload = dict(client.init_payload)

@@ -274,6 +274,13 @@ height; the profile law extends it upwards:
 | `rho_zero` | system file (1.225) | air density [kg/m³]; the sea-level density for `"exponential"` |
 | `height_gnd` | 0.0 | ground altitude above sea level [m] (`"exponential"`) |
 
+The density law changes the forces the ROM's coefficients turn into, so it
+belongs with a ROM identified at a known density: the simulation-only
+`rom_config_aerostructural.yaml` (constant 1.225 kg/m³). The default
+flight-corrected ROM was fitted to flight data reduced with a constant
+1.225 kg/m³, which already absorbs the lower density at the flown heights;
+the exponential law counts that effect twice there.
+
 The laws are those of AtmosphericModels.jl, normalized to `wind_speed` at 6 m:
 `EXP` = `(z/6)^alpha`, `LOG` = `ln(z/z0)/ln(6/z0)`, `EXPLOG` = `2*LOG - EXP`.
 
