@@ -95,13 +95,18 @@ def series_from_phase(phase):
     return out
 
 
-def series_from_optimizer_result(result, path_parameters):
+def series_from_optimizer_result(result, path_parameters, periodic=False):
     """Series dict straight from the NLP solution (re-simulation fallback).
 
     ``optimized_trajectory`` carries the per-node decision values only, so
     time is integrated from ``dt = ds / s_dot`` and the path angles are
     evaluated from the optimized spline at the solved (r, s) nodes. Returns
     None when the result holds no trajectory.
+
+    ``periodic`` (an NLP solved with ``periodic_wrap``): node 0 is appended
+    again at the end of the period, one seam interval after the last node,
+    so the series is the closed cycle -- the seam's time and energy count in
+    the metrics and the closure reads r(s_end) - r(0), as in the NLP.
     """
     traj = getattr(result, "optimized_trajectory", None) or {}
     if not traj:
@@ -109,6 +114,10 @@ def series_from_optimizer_result(result, path_parameters):
     out = {k: np.asarray(v, dtype=float).ravel() for k, v in traj.items()}
     n = min(len(v) for v in out.values())
     out = {k: v[:n] for k, v in out.items()}
+    if periodic and {"s", "s_dot"} <= out.keys() and n > 1:
+        s_end = float((path_parameters or {}).get("s_final", 1.0))
+        out = {k: np.append(v, v[0]) for k, v in out.items()}
+        out["s"][-1] = s_end
     _ensure_power(out)
     if "t" not in out and {"s", "s_dot"} <= out.keys():
         ds = np.diff(out["s"], prepend=out["s"][0])
@@ -594,7 +603,13 @@ def save_cycle_comparison_plots(
         opt_source = "re-simulated optimized cycle"
     if not opt and result is not None:
         opt = series_from_optimizer_result(
-            result, (optimized_config or {}).get("path_parameters")
+            result,
+            (optimized_config or {}).get("path_parameters"),
+            periodic=bool(
+                ((optimized_config or {}).get("sim_parameters") or {}).get(
+                    "periodic_wrap", False
+                )
+            ),
         )
         opt_source = "NLP's own per-node solution"
     if opt:

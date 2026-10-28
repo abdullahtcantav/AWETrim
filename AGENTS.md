@@ -99,7 +99,16 @@ src/awetrim/
                          together, so with the mirror rows those rows are
                          dependent and their multipliers not unique; the
                          clean fix is elimination (declare only the first
-                         half as variables) -- open follow-up)
+                         half as variables) -- open follow-up.
+                         sim_parameters.fix_depower_profile: per-node depower
+                         held at its warm start (the full-cycle closing
+                         stage). sim_parameters.parametric_speed_floor: the
+                         anti-hesitation floor sigma' >= f sigma_ref without a
+                         turn-radius constraint (the full-cycle seeds emit
+                         0.2; a collapsed sigma' is a spline cusp that breaks
+                         the node trim). The power objective's scale is
+                         floored at 0.25 mean|P| of the warm start. All
+                         opt-in keys off = NLP unchanged)
   environment/       ✅  Wind (uniform / logarithmic / power_law / explog /
                          jet / tabulated). profile_laws.py is the ONLY place the
                          analytic formulas live (pure functions over an ``xp``
@@ -186,7 +195,7 @@ commit bad8a9b) and `config_paths.LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG` keeps its
 path so the comparison scripts run on a checkout of it.
 
 Full-cycle optimisation scripts (`optimization/cycle/`): `fit_periodic_cycle_config.py`
-+ `run_full_cycle_opti.py` (multi-lobe cycle, `close_radial_cycle`). Studies
++ `run_full_cycle_opti.py` (multi-lobe cycle; closed through the `periodic_wrap` seam, the closing stage uses the one-sided `close_radial_cycle` pin; step boxes ±0.15 rad / ±50 m in the closing stage, 4x that in the power stage and polish; `--step-scale` scales the latter). Studies
 built on them live in `optimization/studies/` (see its README), e.g.
 `run_uploop_eight_opti.py` + `plot_uploop_eight_comparison.py` (ONE slanted up-loop figure eight per period: low lobe
 + crossings reel out, high arc reels in; `periodic_wrap`, `free_speed`, free

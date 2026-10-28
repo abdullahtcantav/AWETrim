@@ -209,6 +209,24 @@ def resolve_kite(kite: str | Path | None = None) -> dict:
     }
 
 
+def override_wind(wind: dict, speed=None, height=None) -> dict:
+    """The profile's wind with its amplitude replaced: ``speed`` (m/s) at
+    ``height`` (m, default the profile's ``height_ref``). The law and its
+    other parameters (z0, alpha, ...) are kept, so a wind sweep scales one
+    profile shape. A tabulated profile has no single amplitude and refuses."""
+    if speed is None:
+        if height is not None:
+            raise ValueError("--wind-height needs --wind-speed")
+        return dict(wind)
+    if wind["model_type"] == "tabulated":
+        raise ValueError("a tabulated wind profile has no amplitude to override")
+    out = dict(wind)
+    out["speed_wind_ref"] = float(speed)
+    if height is not None:
+        out["height_ref"] = float(height)
+    return out
+
+
 def wind_tag(wind: dict) -> str:
     """Filename tag identifying the wind a cycle was solved at."""
     if wind["model_type"] == "tabulated":
