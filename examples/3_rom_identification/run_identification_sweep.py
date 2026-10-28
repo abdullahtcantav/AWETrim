@@ -39,6 +39,11 @@ until each wind's state is converged with |course rate| below a tolerance
 instead of the unloaded build, whose first iterations can settle on a
 one-tip-stalled, turning state with zero steering.
 
+--repolar (wireframe) solves the polars of the saved anchors again over the
+current polar_d_alpha_deg, e.g. after widening it to reach the stall: each
+anchor is restored and re-solved where it stands for its trimmed body, and its
+trim and polar rows are replaced together.
+
 Usage (project root):
     python examples/3_rom_identification/run_identification_sweep.py
     python examples/3_rom_identification/run_identification_sweep.py --fidelity wireframe
@@ -46,6 +51,7 @@ Usage (project root):
     python examples/3_rom_identification/run_identification_sweep.py --chains w5.0_depower_1.35 w5.0_depower_2.60
     python examples/3_rom_identification/run_identification_sweep.py --list
     python examples/3_rom_identification/run_identification_sweep.py --base-only
+    python examples/3_rom_identification/run_identification_sweep.py --repolar
 """
 
 from __future__ import annotations
@@ -230,6 +236,86 @@ def solve_base_states(driver, case, spec: dict, out: Path) -> None:
     )
 
 
+def polar_increments(spec: dict) -> np.ndarray:
+    """The frozen-shape polar's angle-of-attack increments [deg]."""
+    lo, hi, inc = spec["polar_d_alpha_deg"]
+    return np.round(np.arange(lo, hi + 0.5 * inc, inc), 9)
+
+
+def anchor_rows(chain: Chain, index: int, prepared, config: dict, meta: dict,
+                final_state: dict, d_alpha: np.ndarray):
+    """``(trim_row, polar_rows, trim)`` of a converged state, its frozen-shape
+    polar solved; None when the state did not converge (or is not finite)."""
+    trim, body = final_state["results_aero"], final_state["body_aero"]
+    if not meta["converged"] or not np.all(
+        np.isfinite(np.asarray(trim["total_aero_force_vec"], dtype=float))
+    ):
+        return None
+    polar = aerodynamic_vsm.run_frozen_alpha_polar_about_trim(body, prepared.vsm_solver, d_alpha)
+    f_trim = np.asarray(trim["total_aero_force_vec"], dtype=float)
+    f_zero = next(s["force_world"] for s in polar if s["d_alpha_deg"] == 0.0)
+    anchor = f"{chain.name}/{index:02d}"
+    m_arr = np.asarray(prepared.m_arr, dtype=float)
+    trim_row = ds.trim_row(
+        anchor=anchor, chain=chain.name, step=index,
+        wind_speed=chain.wind_speed,
+        power_tape_length=prepared.power_tape_length,
+        steering_half_difference=prepared.steering_half_difference,
+        rho=float(config["rho"]), mass_kcu=float(m_arr[0]),
+        mass_total=float(m_arr.sum()), trim=trim, meta=meta,
+        body_z=aerodynamic_vsm.body_centre_panel_axes(body)[2],
+        polar_check=float(np.linalg.norm(f_zero - f_trim) / np.linalg.norm(f_trim)),
+    )
+    return trim_row, ds.polar_rows(anchor, polar), trim
+
+
+def repolar_chain(driver, case, chain: Chain, spec: dict, out: Path) -> int:
+    """Solve the polars of a chain's saved anchors again over the CURRENT
+    ``polar_d_alpha_deg`` (e.g. after widening it): each anchor is restored
+    from its sim_output.h5 and re-solved where it stands (no actuation, a few
+    iterations from a converged shape) for its trimmed aero body, and its trim
+    and polar rows are replaced together. Anchors whose polar already spans
+    the range are skipped (resumable). Returns the anchors redone."""
+    d_alpha = polar_increments(spec)
+    trims, polars = _read_rows(out / ds.TRIMS_FILE), _read_rows(out / ds.POLARS_FILE)
+    if trims is None:
+        return 0
+    steps = sorted(_step_of(trims.anchor[trims.anchor.str.startswith(chain.name + "/")]))
+    n_done = 0
+    for index in steps:
+        anchor = f"{chain.name}/{index:02d}"
+        have = polars.d_alpha_deg[polars.anchor == anchor] if polars is not None else pd.Series(dtype=float)
+        if len(have) and have.min() <= d_alpha.min() + 1e-9 and have.max() >= d_alpha.max() - 1e-9:
+            continue
+        started = time.perf_counter()
+        config = copy.deepcopy(case.config)
+        config["wind_speed_wind_ref"] = float(chain.wind_speed)
+        config["power_tape_final_extension"] = 0.0
+        config["power_tape_extension_step"] = float(spec["depower"]["step"])
+        config["steering_tape_final_extension"] = 0.0
+        config["steering_tape_extension_step"] = float(spec["steering"]["step"])
+        prepared = prepare(driver, case, spec, config)
+        prepared.restore(out / chain.name / f"step_{index:02d}" / "sim_output.h5")
+        final_state = {}
+        _, meta = driver.solve_step(case, prepared, config, final_state=final_state)
+        rows = anchor_rows(chain, index, prepared, config, meta, final_state, d_alpha)
+        if rows is None:
+            print(f"  {anchor}: re-solve NOT CONVERGED, rows kept as they were", flush=True)
+            continue
+        trim_row, polar_rows, trim = rows
+        with sweep_files_lock(out):
+            for name, new in ((ds.TRIMS_FILE, [trim_row]), (ds.POLARS_FILE, polar_rows)):
+                table = _read_rows(out / name)
+                if table is not None:
+                    table[table.anchor != anchor].to_csv(out / name, index=False)
+                ds.append_rows(out / name, new)
+        n_done += 1
+        print(f"  {anchor}: polar {d_alpha.min():+.0f}..{d_alpha.max():+.0f} deg about alpha "
+              f"{trim['aoa_deg']:5.2f} deg, polar check {trim_row['polar_check']:.1e}, "
+              f"{meta['n_iter']} it | {(time.perf_counter() - started) / 60:.1f} min", flush=True)
+    return n_done
+
+
 def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 0) -> int:
     """Solve one chain from step ``start``, appending its anchors to the
     sweep files. A chain resumed past its first step starts from the
@@ -243,9 +329,7 @@ def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 
         prepared.restore(out / chain.name / f"step_{start - 1:02d}" / "sim_output.h5")
     elif spec.get("start_from_converged"):
         prepared.restore(base_state_path(out, chain.wind_speed))
-    lo, hi, inc = spec["polar_d_alpha_deg"]
-    d_alpha = np.round(np.arange(lo, hi + 0.5 * inc, inc), 9)
-    m_arr = np.asarray(prepared.m_arr, dtype=float)
+    d_alpha = polar_increments(spec)
     n_written = start
     for index, step in enumerate(chain.steps[start:], start=start):
         started = time.perf_counter()
@@ -267,37 +351,21 @@ def solve_chain(driver, case, chain: Chain, spec: dict, out: Path, start: int = 
         step_dir.mkdir(parents=True, exist_ok=True)
         save_sim_output(tracking, meta, step_dir)
 
-        trim, body = final_state["results_aero"], final_state["body_aero"]
+        anchor = f"{chain.name}/{index:02d}"
+        rows = anchor_rows(chain, index, prepared, config, meta, final_state, d_alpha)
         # An unconverged state ends the chain before its polar: the fit drops
         # it anyway, and a diverged (NaN) shape has no polar to take.
-        if not meta["converged"] or not np.all(
-            np.isfinite(np.asarray(trim["total_aero_force_vec"], dtype=float))
-        ):
+        if rows is None:
             print(
-                f"  {chain.name}/{index:02d}: NOT CONVERGED, chain stopped "
+                f"  {anchor}: NOT CONVERGED, chain stopped "
                 f"| {(time.perf_counter() - started) / 60:.1f} min",
                 flush=True,
             )
             break
-        polar = aerodynamic_vsm.run_frozen_alpha_polar_about_trim(
-            body, prepared.vsm_solver, d_alpha
-        )
-        f_trim = np.asarray(trim["total_aero_force_vec"], dtype=float)
-        f_zero = next(s["force_world"] for s in polar if s["d_alpha_deg"] == 0.0)
-        anchor = f"{chain.name}/{index:02d}"
-        trim_row = ds.trim_row(
-            anchor=anchor, chain=chain.name, step=index,
-            wind_speed=chain.wind_speed,
-            power_tape_length=prepared.power_tape_length,
-            steering_half_difference=prepared.steering_half_difference,
-            rho=float(config["rho"]), mass_kcu=float(m_arr[0]),
-            mass_total=float(m_arr.sum()), trim=trim, meta=meta,
-            body_z=aerodynamic_vsm.body_centre_panel_axes(body)[2],
-            polar_check=float(np.linalg.norm(f_zero - f_trim) / np.linalg.norm(f_trim)),
-        )
+        trim_row, polar_rows, trim = rows
         with sweep_files_lock(out):
             ds.append_rows(out / ds.TRIMS_FILE, [trim_row])
-            ds.append_rows(out / ds.POLARS_FILE, ds.polar_rows(anchor, polar))
+            ds.append_rows(out / ds.POLARS_FILE, polar_rows)
         n_written += 1
 
         stalled = float(trim.get("stalled_fraction", 0.0) or 0.0)
@@ -366,6 +434,9 @@ def main() -> None:
     parser.add_argument("--base-only", action="store_true",
                         help="solve the base states (start_from_converged) and exit; "
                         "run this first before launching parallel --chains runs")
+    parser.add_argument("--repolar", action="store_true",
+                        help="solve the polars of the saved anchors again over the current "
+                        "polar_d_alpha_deg (wireframe; with --chains, those chains only)")
     args = parser.parse_args()
 
     fidelity, spec = ds.identification_settings(
@@ -387,6 +458,13 @@ def main() -> None:
 
     print(f"{args.kite} ({fidelity}): built power-tape length {built:.3f} m, {len(chains)} chains "
           f"-> {out}", flush=True)
+    if args.repolar:
+        if fidelity != "wireframe":
+            raise SystemExit("--repolar needs the wireframe (Billow cannot restore a state)")
+        for chain in chains:
+            print(f"{chain.name}: repolar, {repolar_chain(driver, case, chain, spec, out)} anchors redone",
+                  flush=True)
+        return
     if spec.get("start_from_converged"):
         if fidelity != "wireframe":
             raise SystemExit("start_from_converged needs the wireframe (Billow cannot restore a state)")
