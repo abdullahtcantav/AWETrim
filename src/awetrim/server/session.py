@@ -212,6 +212,7 @@ class ReeloutSession:
         self.last_step_started: Optional[datetime] = None
         self.last_step_finished: Optional[datetime] = None
         self._inflow: Optional[dict] = None
+        self._rho_system: float = 1.225
         self._wind_spec: Optional[dict] = None
         self._optimization_params: List[str] = []
         self._target: str = "power"
@@ -319,6 +320,8 @@ class ReeloutSession:
         wind_spec = self._resolve_wind_spec(inflow)
         system_model.wind = self._build_wind(wind_spec)
         sim_parameters["expand_nlp"] = wind_spec["model_type"] != "tabulated"
+        rho_system = float(system_model.rho)
+        self._apply_air_density(system_model, inflow, rho_system)
 
         start_state = {
             "t": 0,
@@ -342,6 +345,7 @@ class ReeloutSession:
                 raise SessionBusyError("cannot re-initialize while a solve is running")
             self._clear()
             self.system_model = system_model
+            self._rho_system = rho_system
             self.phase = phase
             self._inflow = dict(inflow) if inflow else None
             self._wind_spec = wind_spec
@@ -370,6 +374,25 @@ class ReeloutSession:
                 turbulence,
             )
         return wind_kwargs_from_inflow(inflow)
+
+    @staticmethod
+    def _apply_air_density(
+        system_model: Any, inflow: Optional[Dict[str, Any]], rho_system: float
+    ) -> None:
+        """InflowConditions density fields -> ``Kite.rho`` + density model.
+
+        ``rho_system`` (the system file's value) is the fallback ``rho_zero``,
+        so a step that drops the fields returns to it.
+        """
+        inflow = inflow or {}
+        rho_zero = inflow.get("rho_zero")
+        system_model.kite.rho = float(rho_system if rho_zero is None else rho_zero)
+        if inflow.get("air_density_law", "constant") == "exponential":
+            system_model.kite.air_density_model = {
+                "height_gnd": float(inflow.get("height_gnd") or 0.0)
+            }
+        else:
+            system_model.kite.air_density_model = None
 
     @staticmethod
     def _build_wind(spec: Dict[str, Any]) -> Any:
@@ -901,6 +924,9 @@ class ReeloutSession:
                 self.system_model.wind = self._build_wind(wind_spec)
                 sim_parameters["expand_nlp"] = (
                     wind_spec["model_type"] != "tabulated"
+                )
+                self._apply_air_density(
+                    self.system_model, inflow_conditions, self._rho_system
                 )
                 self._wind_spec = wind_spec
                 self._inflow = dict(inflow_conditions)

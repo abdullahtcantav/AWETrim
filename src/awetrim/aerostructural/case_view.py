@@ -26,6 +26,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+from awetrim.aerostructural.case import air_density_at_case
 from awetrim.aerostructural.utils import load_sim_output
 
 CASE_VIEW_FILENAME = "case.json"
@@ -430,7 +431,8 @@ def trim_summary(case: Mapping[str, Any]) -> list[tuple[str, str, float | str, s
             ("Aerodynamics", "CD (VSM, deformed projected area)", _float(trim.get("cd")), ""),
         ]
     area_rom = _float(view.get("reference_area_rom"))
-    rho = _float(config.get("rho", 1.225))
+    # The density the case was solved at (the kite height under a density law).
+    rho = air_density_at_case({**config, **state})
     if np.isfinite(area_rom) and area_rom > 0 and np.isfinite(speed_apparent):
         q_area = 0.5 * rho * speed_apparent**2 * area_rom
         rows += [

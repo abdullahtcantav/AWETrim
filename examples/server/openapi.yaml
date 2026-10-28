@@ -384,6 +384,28 @@ components:
           - type: 'null'
           title: Speeds
           description: Wind speeds [m/s] at heights, default [wind_speed]
+        air_density_law:
+          type: string
+          enum:
+          - constant
+          - exponential
+          title: Air Density Law
+          description: constant = rho_zero everywhere; exponential = rho_zero * exp(-(z +
+            height_gnd)/8550) at the kite height z (AtmosphericModels.jl calc_rho)
+          default: constant
+        rho_zero:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Rho Zero
+          description: 'Air density [kg/m3]: sea-level density for the exponential law, the
+            density itself for the constant one. Default: the system file''s value (1.225)'
+        height_gnd:
+          type: number
+          title: Height Gnd
+          description: Ground altitude above sea level [m] (exponential law)
+          default: 0.0
       additionalProperties: false
       type: object
       required:

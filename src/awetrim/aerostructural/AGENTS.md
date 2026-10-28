@@ -56,6 +56,12 @@ src/awetrim/aerostructural/
   case.py                          Case setup shared by drivers and scripts:
                                    DEFAULT_KITE_NAME, CONFIG_DEFAULTS,
                                    resolve_kite_paths, build_system_model,
+                                   air_density_at_case (THE density of a
+                                   case: as_config rho, or with
+                                   air_density_law: exponential + height_gnd
+                                   the sea-level rho taken to the kite height
+                                   r sin(beta); VSM, bridle drag and the
+                                   system model's tether all read it),
                                    build_actuation_case_folder,
                                    build_flight_case_folder. Was
                                    examples/2_aerostructural/common.py until

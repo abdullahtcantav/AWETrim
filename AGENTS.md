@@ -118,7 +118,14 @@ src/awetrim/
                          derives the other lazily. wind_factory.create_wind_model
                          builds fully numeric models; wind_profiles.py maps the
                          co-sim InflowConditions struct (laws 0-6, CUSTOM_* fits)
-                         onto create_wind_model kwargs.
+                         onto create_wind_model kwargs. profile_laws.air_density
+                         is the density law rho0 exp(-(z + h_gnd)/8550)
+                         (AtmosphericModels.jl calc_rho); Kite.rho stays the
+                         constant unless Kite.air_density_model = {height_gnd,
+                         scale_height?} is set, then lift/drag, KCU drag and the
+                         lumped tether drag use it at z = r sin(beta)
+                         (SystemModel.air_density) and the Williams tether
+                         per node (air_density_at_height)
   server/            ✅  REST API for reelout trajectory optimization
                          (FastAPI, optional [server] extra; endpoints
                          /init /status /step /trajectory /reset; one
@@ -133,7 +140,9 @@ src/awetrim/
                          DepowerParams {mode: fixed|optimize|profile, value},
                          InflowConditions {wind_speed @6 m, wind_direction
                          (compass, FROM), profile_law 0-6, alpha, z0,
-                         heights/speeds, turbulence (ignored)},
+                         heights/speeds, turbulence (ignored),
+                         air_density_law constant|exponential, rho_zero
+                         (default: the system file's rho), height_gnd},
                          InitParams, StepParams. Replies always echo the
                          depower the returned path assumes — it is not
                          flyable without it. Optional client-supplied
