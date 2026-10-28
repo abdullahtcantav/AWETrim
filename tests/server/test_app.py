@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 import awetrim.server.session as session_mod
 from awetrim.server.app import create_app
 from awetrim.server.session import ReeloutSession
+from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
 
 N_NODES = 12  # must satisfy the InitRequest n_points >= 10 bound
 R0 = 200.0
@@ -447,3 +448,67 @@ def test_pattern_limits_round_trip_through_init_and_step(client):
     assert client.post(
         "/step", json={"pattern_limits": {"elevation_min": 40, "elevation_max": 30}}
     ).status_code == 422
+
+
+def test_angle_of_attack_limits_round_trip_through_init_and_step(client):
+    payload = dict(client.init_payload)
+    payload["angle_of_attack_limits"] = {"min": -3.0}
+    reply = client.post("/init", json=payload)
+    assert reply.status_code == 200
+    assert reply.json()["angle_of_attack_limits"]["min"] == -3.0
+    phase = StubPhase.latest
+    override = phase.pattern_config["sim_parameters"]["opti_limits_override"]
+    # the omitted side keeps the default ceiling
+    assert override["angle_of_attack"] == pytest.approx(
+        [math.radians(-3.0), DEFAULT_OPTI_LIMITS["angle_of_attack"][1]]
+    )
+
+    phase.results.append(_fake_result())
+    phase.release.set()
+    step = client.post("/step", json={}).json()  # omitted -> kept
+    assert step["angle_of_attack_limits"]["min"] == -3.0
+
+    phase.results.append(_fake_result())
+    phase.release.set()
+    step = client.post("/step", json={"angle_of_attack_limits": {}}).json()
+    assert step["angle_of_attack_limits"] is None  # {} -> defaults
+    assert "opti_limits_override" not in phase.pattern_config["sim_parameters"]
+
+    assert client.post(
+        "/step", json={"angle_of_attack_limits": {"min": 5, "max": 2}}
+    ).status_code == 422
+    assert client.post(
+        "/step", json={"angle_of_attack_limits": {"max": 12, "stall_margin": 2}}
+    ).status_code == 422
+
+
+def test_angle_of_attack_stall_margin_uses_the_rom_stall_angle(client, monkeypatch):
+    alpha_stall = math.radians(15.5)
+    monkeypatch.setattr(
+        session_mod,
+        "create_system_model_from_yaml",
+        lambda yaml_path: SimpleNamespace(
+            wind=None,
+            kite=SimpleNamespace(aero_params={"angle_of_attack_stall": alpha_stall}),
+        ),
+    )
+    payload = dict(client.init_payload)
+    payload["angle_of_attack_limits"] = {"min": -5.0, "stall_margin": 2.0}
+    reply = client.post("/init", json=payload)
+    assert reply.status_code == 200
+    override = StubPhase.latest.pattern_config["sim_parameters"][
+        "opti_limits_override"
+    ]
+    assert override["angle_of_attack"] == pytest.approx(
+        [math.radians(-5.0), alpha_stall - math.radians(2.0)]
+    )
+    assert reply.json()["angle_of_attack_limits"] == {
+        "min": -5.0, "max": None, "stall_margin": 2.0
+    }
+
+
+def test_angle_of_attack_stall_margin_needs_a_rom_stall_angle(client):
+    payload = dict(client.init_payload)
+    payload["angle_of_attack_limits"] = {"stall_margin": 2.0}
+    # the fixture's system model has no kite ROM, so no stall angle
+    assert client.post("/init", json=payload).status_code == 400

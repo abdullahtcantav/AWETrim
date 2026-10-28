@@ -209,6 +209,7 @@ def main(
     power_tape_index=None,
     ### STRUC
     psystem=None,
+    final_state=None,
 ):
     """
     Runs the aero-structural solver for the given input parameters.
@@ -217,6 +218,9 @@ def main(
         config (dict): Main configuration dictionary.
         PROJECT_DIR (Path): Path to the project directory.
         results_dir (Path): Path to the results directory.
+        final_state (dict or None): When given, filled with the FINAL trim's
+            ``body_aero`` (trimmed attitude, trim inflow set) and
+            ``results_aero``, as in ``coupled.coupled_solver.main``.
 
     Returns:
         tracking_data (dict): Dictionary containing time histories of positions, forces, etc.
@@ -240,7 +244,10 @@ def main(
     # current == target at iteration 0 and no walk happens; with a different
     # final target only the difference is walked. The ramp remains the right
     # tool for COLD solves (it doubles as the load continuation) -- preset
-    # only from a deformed snapshot equilibrated at these lengths.
+    # only from a deformed snapshot equilibrated at these lengths. Snapshots
+    # written since 2026-10-27 DO store their actuation (per-connection
+    # bridle_connection_rest_lengths): starting from one of those, the
+    # geometry already carries the steering and a preset would add it twice.
     steering_preset = config.get("steering_tape_preset_extension")
     if (
         steering_preset is not None
@@ -602,6 +609,9 @@ def main(
     speed_bound_counter = 0
     runaway_should_break = False
     stop_reason = None
+    # Why the loop ended, the same values as the Billow driver:
+    # converged | stagnated | diverged | stopped | max_iter.
+    exit_reason = "max_iter"
     # Second exit condition: the tether force must have settled since the last
     # state change (convergence.force_settle_state). 0 disables. Gates the
     # main tier only; the plateau fallback keeps its own acceptance.
@@ -979,8 +989,9 @@ def main(
         include_gravity=config["is_with_gravity"],
         is_with_plot=config["is_with_aero_plot_per_iteration"],
         # Lets the trim carry the tether when
-        # config["tether"]["include_in_trim"] is set.
-        config=config,
+        # config["tether"]["include_in_trim"] is set. The pre-loop trim
+        # sets the whole attitude, so it takes quasi_steady_trim.pre_loop.
+        config=aerodynamic_vsm.pre_loop_trim_config(config),
     )
     logging.debug(
         f"Aero symmetry check, f_aero_y: {np.sum([force[1] for force in f_aero_wing_vsm_format])}"
@@ -1976,6 +1987,14 @@ def main(
                 and is_modulus_ramp_finalized
                 and is_elongation_satisfied
             ):
+                if is_convergence:
+                    exit_reason = "converged"
+                elif is_stagnated:
+                    exit_reason = "stagnated"
+                elif not np.all(np.isfinite(np.asarray(f_residual, dtype=float))):
+                    exit_reason = "diverged"
+                else:
+                    exit_reason = "stopped"
                 break
     ######################################################################
     ## END OF SIMULATION FOR LOOP
@@ -2039,37 +2058,8 @@ def main(
             )
 
     # print out the geometric angle of attack of the mid panel
-    panels = body_aero.panels
-
-    # Select middle panel
-    mid_idx = len(panels) // 2
-    panel = panels[mid_idx]
-
-    # Midpoints of leading and trailing edges
-    le_mid = 0.5 * (panel.LE_point_1 + panel.LE_point_2)
-    te_mid = 0.5 * (panel.TE_point_1 + panel.TE_point_2)
-
-    # Chord direction vector
-    vec_chord = te_mid - le_mid
-    vec_chord /= np.linalg.norm(vec_chord)
-
-    # Apparent wind direction (normalize)
-    vec_wind = body_aero.va
-    # Project onto plane of interest (optional: usually x-z plane)
-    # Remove spanwise component if needed
-    vec_chord_2d = np.array([vec_chord[0], vec_chord[2]])
-    vec_wind_2d = np.array([vec_wind[0], vec_wind[2]])
-
-    vec_chord_2d /= np.linalg.norm(vec_chord_2d)
-    vec_wind_2d /= np.linalg.norm(vec_wind_2d)
-
-    # Angle between vectors (signed)
-    dot = np.clip(np.dot(vec_chord_2d, vec_wind_2d), -1.0, 1.0)
-    # z-component of the 2-D cross product, written out: np.cross on
-    # 2-element vectors is deprecated since NumPy 2.0.
-    cross = vec_chord_2d[0] * vec_wind_2d[1] - vec_chord_2d[1] * vec_wind_2d[0]
-
-    angle = np.arctan2(cross, dot)
+    mid_idx = len(body_aero.panels) // 2
+    angle = aerodynamic_vsm.mid_span_chord_angle_of_attack(body_aero, body_aero.va)
     alpha_at_ac_mid = np.ravel(results_aero["alpha_at_ac"])[mid_idx]
 
     print(f"alpha = {np.degrees(angle):.2f}° (va vs mid-span chord)")
@@ -2176,6 +2166,15 @@ def main(
     except Exception:
         tether_force = np.nan
 
+    # Final word on why the run ended: the plateau acceptance above can still
+    # turn a max_iter / stagnated run into a converged one (see
+    # converged_at_fallback), and a trim_speed_bound stop leaves the loop
+    # without passing the exit check.
+    if is_convergence:
+        exit_reason = "converged"
+    elif stop_reason is not None:
+        exit_reason = "stopped"
+
     meta = {
         "total_time_s": time.time() - start_time,
         "n_iter": i + 2,  # +2: 1 for pre-loop initial state + (i+1) loop entries
@@ -2184,6 +2183,9 @@ def main(
         # convergence / stagnation / max_iter: "trim_speed_bound" (runaway
         # stop, see qs_speed_bound_patience). None otherwise.
         "stop_reason": stop_reason,
+        # Why the loop ended, the same values as the Billow driver:
+        # converged | stagnated | diverged | stopped | max_iter.
+        "exit_reason": exit_reason,
         # The nodal force residual the run ENDED on, and the threshold it was
         # tested against. Reporting only; the criterion itself is unchanged
         # (check_convergence still owns it). A continuation needs this per
@@ -2318,6 +2320,11 @@ def main(
         "trim_results": _trim_results_summary(results_aero),
         "tether_force": float(tether_force),
         "rest_lengths": rest_lengths,
+        # The structure's own node positions at exit: what the next solve on
+        # the same structure starts from. NOT tracking positions[-1], which is
+        # that shape after the final trim rotation (a fraction of a degree, a
+        # few cm at the tips) -- the structure never receives it.
+        "structure_positions": np.asarray(psystem.positions, dtype=float).copy(),
         # --- solver state, for a continuation to pick up where this left off --
         # None of this is model state, and none of it can be reconstructed from
         # the snapshot: it is what the coupled loop LEARNED about its own
@@ -2363,6 +2370,9 @@ def main(
                 n_ever_stalled,
                 tracking_data["stall_mask"].shape[1],
             )
+
+    if final_state is not None:
+        final_state.update(body_aero=body_aero, results_aero=results_aero)
 
     return tracking_data, meta
 

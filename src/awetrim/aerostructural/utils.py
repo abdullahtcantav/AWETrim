@@ -37,6 +37,22 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+#: Optional struc_geometry block of per-CONNECTION bridle rest lengths
+#: ``{headers: [row, l0], data: [[bridle_connections row, l0 [m]], ...]}``.
+#: The bridle_lines table keys rest lengths by line NAME, and the two steering
+#: tapes share one name, so an actuated (asymmetric) state is written here; a
+#: listed connection's l0 replaces its line's. Written by
+#: ``results.build_deformed_struc_geometry``, read by both geometry readers.
+BRIDLE_CONNECTION_REST_LENGTHS = "bridle_connection_rest_lengths"
+
+
+def bridle_connection_rest_lengths(struc_geometry: dict) -> dict:
+    """``{bridle_connections row index: l0}`` from the optional
+    :data:`BRIDLE_CONNECTION_REST_LENGTHS` block; empty when absent."""
+    block = struc_geometry.get(BRIDLE_CONNECTION_REST_LENGTHS) or {}
+    return {int(row): float(l0) for row, l0 in block.get("data", [])}
+
+
 def save_results(tracking, meta, filename):
     """
     Save tracking arrays and metadata to an HDF5 file.

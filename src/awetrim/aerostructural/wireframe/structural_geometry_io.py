@@ -19,8 +19,9 @@
 import numpy as np
 import logging
 
-from ..utils import calculate_cg, calculate_inertia
+from ..utils import bridle_connection_rest_lengths, calculate_cg, calculate_inertia
 from awetrim.utils.system_config import get_kite
+from awetrim.aerostructural.symmetry import warn_if_asymmetric
 
 
 def compute_wing_stats_from_pss(struc_geometry):
@@ -330,19 +331,33 @@ def initialize_bridle_line_system(
     pulley_line_indices = []
     pulley_line_to_other_node_pair_dict = {}
     steering_tape_indices = []
-    for _, conn_data in enumerate(struc_geometry["bridle_connections"]["data"]):
+    # Per-connection rest lengths of an actuated snapshot override the
+    # line's (steering tapes share one bridle_lines row).
+    connection_l0 = bridle_connection_rest_lengths(struc_geometry)
+    for conn_row, conn_data in enumerate(struc_geometry["bridle_connections"]["data"]):
 
         conn_name = conn_data[0]
         ci = int(conn_data[1])
         cj = int(conn_data[2])
 
         # computing the mass of the bridle line, and adding it 0.5 to each particle using m_arr
-        l0 = bridle_lines_dict[conn_name]["l0"]
+        l0 = connection_l0.get(conn_row, bridle_lines_dict[conn_name]["l0"])
         material = bridle_lines_dict[conn_name]["material"]
         cross_sectional_area = np.pi * (bridle_lines_dict[conn_name]["d"] / 2) ** 2
         m_line = struc_geometry[material]["density"] * cross_sectional_area * l0
-        m_arr[ci] += m_line / 2
-        m_arr[cj] += m_line / 2
+        if len(conn_data[1:]) == 3:
+            # A rope over a pulley: a quarter to each end, half to the pulley,
+            # as read_struc_geometry_yaml does. Until 2026-10-28 the whole rope
+            # went half to ci and half to cj, so the mass depended on the order
+            # the row was written in (LEI-V3 [M, 36, 38, 34] / [M, 34, 39, 37]:
+            # 77 g on node 36, 25 g on its mirror 37).
+            ck = int(conn_data[3])
+            m_arr[ci] += m_line / 4
+            m_arr[cj] += m_line / 2
+            m_arr[ck] += m_line / 4
+        else:
+            m_arr[ci] += m_line / 2
+            m_arr[cj] += m_line / 2
 
         # If there is third connections, this line is a pulley!
         # In here we will treat both ci-cj and cj-ck
@@ -631,6 +646,10 @@ def main(struc_geometry, config=None, system_config=None):
     struc_node_le_indices = np.array(struc_node_le_indices)
     struc_node_te_indices = np.array(struc_node_te_indices)
 
+    # An asymmetric input turns an unsteered kite; warn (see symmetry.py).
+    warn_if_asymmetric(
+        struc_nodes, kite_connectivity_arr, l0_arr, k_arr, linktype_arr, m_arr, config
+    )
     return (
         # node level
         struc_nodes,

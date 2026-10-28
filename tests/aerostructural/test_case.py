@@ -22,7 +22,7 @@ def test_common_shim_reexports_case(monkeypatch):
     import sys
     from pathlib import Path
 
-    scripts = Path(__file__).resolve().parents[2] / "scripts" / "aerostructural"
+    scripts = Path(__file__).resolve().parents[2] / "examples" / "2_aerostructural"
     monkeypatch.syspath_prepend(str(scripts))
     monkeypatch.delitem(sys.modules, "common", raising=False)
     common = importlib.import_module("common")

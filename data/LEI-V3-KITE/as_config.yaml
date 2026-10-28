@@ -115,6 +115,17 @@ quasi_steady_trim:
   yaw_bounds_deg: !!seq [-4.0, 4.0]             # degrees - yaw angle
   course_rate_bounds_rad_s: !!seq [-2.5, 2.5]   # rad/s - angular velocity about vertical axis
 
+  # Overrides for the PRE-LOOP trim only (the first trim, on the undeformed
+  # geometry). Each trim's roll/pitch/yaw are applied to the structure as a
+  # rotation, so in the coupled loop the bounds above limit the per-iteration
+  # INCREMENT, but here they limit the whole attitude. At 40 deg elevation the
+  # first trim needs ~10 deg of yaw; pinned at 4 it closed the moment with a
+  # ~2 rad/s course rate, stalled the tips and VSM returned NaN.
+  pre_loop:
+    roll_bounds_deg: !!seq [-15.0, 15.0]
+    pitch_bounds_deg: !!seq [-15.0, 15.0]
+    yaw_bounds_deg: !!seq [-15.0, 15.0]
+
 ## aerodynamic bridle
 aerodynamic_bridle:
   cd_cable: !!float 1.1
@@ -156,7 +167,7 @@ structural_pss:
   # bridle stretching several percent is not the kite that was measured, and
   # the stretch moves the trim. It costs about the baseline wall time
   # (~166 s/point vs 164 s across u_dp 0.18-0.42).
-  # See scripts/personal/wes-quasi-steady/FINDINGS_bridle_stiffness.md.
+  # See FINDINGS_bridle_stiffness.md. (available on request)
   update_stiffness: !!bool true
   stiffness_update_scope: !!str 'all'    # 'wing' | 'bridle' | 'all'
   max_elongation: !!float 0.01           # the 1% gate

@@ -55,7 +55,9 @@ dependencies = [
   # fails), and main briefly carried a SyntaxError (fixed on
   # fix/solver-syntax-error). 8825a12 = last commit with the full test suite green.
   "VSM @ git+https://github.com/awegroup/Vortex-Step-Method.git@8825a12136b7259bb37cf5a1222c739eaa9fbd5b",
-  "awes-ekf @ git+https://github.com/ocayon/EKF-AWE.git@main",
+  # EKF-AWE: the shared KCU drag model (awetrim.aerodynamics.kcu_drag). Its flight
+  # reconstructions are read by awetrim.flight_data, not produced here.
+  "awes-ekf @ git+https://github.com/awegroup/EKF-AWE.git@33fc63515bca432d6e01f0386ce4d306c7a5ace1",
   "awesIO @ git+https://github.com/awegroup/awesIO.git@d454992301e1790e069ff850eabf65526545d33c",
 ]
 

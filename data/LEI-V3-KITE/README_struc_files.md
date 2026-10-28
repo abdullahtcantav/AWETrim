@@ -1,7 +1,7 @@
 # Notes to URI
 
 ### Struc Geometry file
-- **Default for PSM simulations:** `struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml`. The PSM/PSS aerostructural scripts (`run_simulation_level_qsm.py` and the sweeps, via `resolve_kite_paths` / `DEFAULT_STRUC_GEOMETRY_FILENAME` in `scripts/aerostructural/common.py`) use this file by default. Don't bother with the non-adjusted version.
+- **Default for PSM simulations:** `struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml`. The PSM/PSS aerostructural scripts (`run_simulation_level_qsm.py` and the sweeps, via `resolve_kite_paths` / `DEFAULT_STRUC_GEOMETRY_FILENAME` in `examples/2_aerostructural/common.py`) use this file by default. Don't bother with the non-adjusted version.
 - for a semi-complete account of how this was obtained, read the parent directory.
 
 ### 2019 powered and depowered state

@@ -71,7 +71,7 @@ const CONTENT = {
   },
   "ekf-awe": {
     title: "EKF-AWE Experimental Reconstruction",
-    text: "EKF-AWE processes flight logs with an Extended Kalman Filter to estimate kite states, aerodynamic coefficients and wind velocity. In AWETrim it is the bridge between real flight data and model validation or tuning, wrapped by the experimental/ module with the data layout used in data/.",
+    text: "EKF-AWE processes flight logs with an Extended Kalman Filter to estimate kite states, aerodynamic coefficients and wind velocity. Its output file per flight is the bridge between real flight data and model validation or tuning: AWETrim reads it with the flight_data/ module, and EKF-AWE reads the as-flown hardware files AWETrim keeps in data/.",
     bullets: ["State reconstruction from noisy logs", "Wind-vector estimation", "In-flight aerodynamic coefficient identification"],
     image: "img/kite-trajectory.png",
     caption: "Reconstructed kite flight trajectory from the EKF-AWE pipeline.",
@@ -203,9 +203,9 @@ const CONTENT = {
   },
   "flight-data-processing": {
     title: "Flight-Data Processing",
-    text: "Alongside the model chain, AWETrim processes measured flights. The experimental/ module preprocesses raw flight logs into the layout the EKF-AWE filter expects and runs the reconstruction (scripts/experimental/run_analysis_ekf.py); the identification/ module turns the reconstructed states into a tidy aerodynamic dataset with the same schema as the aero-structural sweeps. That shared schema is what lets the reduced-order model be identified from flight data and from the VSM–Billow model with the same fit, and compared one against the other.",
+    text: "Alongside the model chain, AWETrim uses measured flights. EKF-AWE preprocesses the raw logs and runs the reconstruction; AWETrim reads its output with the flight_data/ module, and the identification/ module turns the reconstructed states into a tidy aerodynamic dataset with the same schema as the aero-structural sweeps. That shared schema is what lets the reduced-order model be identified from flight data and from the VSM–Billow model with the same fit, and compared one against the other.",
     bullets: [
-      "Flight-log preprocessing into the EKF-AWE input layout (experimental/)",
+      "Flight reconstructions read from EKF-AWE output (flight_data/)",
       "EKF reconstruction of states, wind and aerodynamic coefficients",
       "One aerodynamic dataset schema for flight data and aero-structural sweeps (identification/)"
     ],
@@ -241,7 +241,7 @@ const CONTENT = {
     title: "Design and Model Analysis",
     text: "Public aerodynamics scripts turn the framework into a design tool. parametric_shapes/generate_shape_variations.py morphs the wing planform — aspect ratio, anhedral, taper, twist — and re-evaluates each variant with VSM, while optimize_lei_airfoil.py tunes the LEI airfoil with the ML regression model. compute_stability_derivatives.py finite-differences the VSM trim to obtain the aerodynamic stability derivatives, then extracts and animates the longitudinal and lateral flight-dynamic eigenmodes.",
     bullets: [
-      "Parametric wing-planform & LEI-airfoil studies (scripts/aerodynamics/parametric_shapes/)",
+      "Parametric wing-planform & LEI-airfoil studies (parametric_shapes/ (available on request))",
       "Aerodynamic stability derivatives and animated flight-dynamic eigenmodes",
       "Configuration comparison and model validation against flight data"
     ],

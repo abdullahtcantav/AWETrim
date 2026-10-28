@@ -693,6 +693,7 @@ def main(
     billow_structure=None,
     canopy_sections=None,
     strut_sections=None,
+    final_state=None,
 ):
     """
     Runs the aero-structural solver for the given input parameters.
@@ -711,6 +712,12 @@ def main(
             converged state once the depower walk has arrived, and each
             followed by ``steering_settle_iterations_after_update`` iterations
             in which no convergence exit is allowed.
+        final_state (dict or None): When given, filled with the objects of
+            the FINAL trim that ``meta`` cannot store: ``body_aero`` (the VSM
+            body at the trimmed attitude, with the trim's inflow set) and
+            ``results_aero`` (the full trim result). Re-solving that body
+            reproduces the trim's aerodynamic force, which is what a
+            frozen-shape evaluation of the converged state needs.
 
     Returns:
         tracking_data (dict): Dictionary containing time histories of positions, forces, etc.
@@ -889,7 +896,9 @@ def main(
         # quasi_steady_trim block, KCU drag. Not passed before 2026-10-07, so
         # every earlier Billow trim was TETHERLESS with the uncapped default
         # trim whatever as_config said; the wireframe driver always passed it.
-        config=config,
+        # The pre-loop trim sets the whole attitude, so it takes
+        # quasi_steady_trim.pre_loop.
+        config=aerodynamic_vsm.pre_loop_trim_config(config),
     )
 
     logging.debug(
@@ -1438,38 +1447,8 @@ def main(
     ## END OF SIMULATION FOR LOOP
     ######################################################################
     # print out the geometric angle of attack of the mid panel
-    panels = body_aero.panels
-
-    # Select middle panel
-    mid_idx = len(panels) // 2
-    panel = panels[mid_idx]
-
-    # Midpoints of leading and trailing edges
-    le_mid = 0.5 * (panel.LE_point_1 + panel.LE_point_2)
-    te_mid = 0.5 * (panel.TE_point_1 + panel.TE_point_2)
-
-    # Chord direction vector
-    vec_chord = te_mid - le_mid
-    vec_chord /= np.linalg.norm(vec_chord)
-
-    # Apparent wind direction (normalize)
-    vec_wind = vel_app / np.linalg.norm(vel_app)
-
-    # Project onto plane of interest (optional: usually x-z plane)
-    # Remove spanwise component if needed
-    vec_chord_2d = np.array([vec_chord[0], vec_chord[2]])
-    vec_wind_2d = np.array([vec_wind[0], vec_wind[2]])
-
-    vec_chord_2d /= np.linalg.norm(vec_chord_2d)
-    vec_wind_2d /= np.linalg.norm(vec_wind_2d)
-
-    # Angle between vectors (signed)
-    dot = np.clip(np.dot(vec_chord_2d, vec_wind_2d), -1.0, 1.0)
-    # z-component of the 2-D cross product, written out: np.cross on
-    # 2-element vectors is deprecated since NumPy 2.0.
-    cross = vec_chord_2d[0] * vec_wind_2d[1] - vec_chord_2d[1] * vec_wind_2d[0]
-
-    angle = np.arctan2(cross, dot)
+    mid_idx = len(body_aero.panels) // 2
+    angle = aerodynamic_vsm.mid_span_chord_angle_of_attack(body_aero, vel_app)
 
     print(f"alpha = {np.degrees(angle):.2f}° (va vs mid-span chord)")
     print(
@@ -1551,5 +1530,7 @@ def main(
             dtype=np.int32,
         ),
     }
+    if final_state is not None:
+        final_state.update(body_aero=body_aero, results_aero=results_aero)
 
     return tracking_data, meta
