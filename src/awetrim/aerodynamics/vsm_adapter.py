@@ -193,6 +193,8 @@ class VSMAeroModelAdapter:
         """Instantiate a VSM ``BodyAerodynamics`` from ``aero_geometry.yaml``."""
         from VSM.core.BodyAerodynamics import BodyAerodynamics
 
+        from awetrim.aerodynamics.vsm_settings import vsm_body_kwargs
+
         with open(self.aero_geometry_path, "r", encoding="utf-8") as f:
             body_config = yaml.safe_load(f)
 
@@ -215,6 +217,7 @@ class VSMAeroModelAdapter:
                 file_path=tmp_path,
                 spanwise_panel_distribution=self.spanwise_panel_distribution,
                 bridle_path=bridle,
+                **vsm_body_kwargs(),
             )
         finally:
             Path(tmp_path).unlink(missing_ok=True)

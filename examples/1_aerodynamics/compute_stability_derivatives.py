@@ -444,6 +444,8 @@ def main() -> None:
             _add_vsm_path(args.vsm_src)
             from VSM.core.BodyAerodynamics import BodyAerodynamics as _BA
 
+            from awetrim.aerodynamics.vsm_settings import vsm_body_kwargs
+
             with deformed_aero_path.open("r", encoding="utf-8") as _f:
                 aero_cfg = yaml.safe_load(_f)
             _resolve_csv_paths(aero_cfg, Path(args.config_folder))
@@ -459,6 +461,7 @@ def main() -> None:
                     file_path=_tmp_path,
                     spanwise_panel_distribution=args.spanwise_panel_distribution,
                     bridle_path=props.get("struc_geometry_path"),
+                    **vsm_body_kwargs(),
                 )
             finally:
                 Path(_tmp_path).unlink()

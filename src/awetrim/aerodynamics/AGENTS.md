@@ -42,7 +42,31 @@ src/awetrim/aerodynamics/
   apparent_wind.py
   panel_kernels.py
   trim_casadi.py
+  vsm_settings.py
 ```
+
+`vsm_settings.py` (2026-10-28) is the ONE place AWETrim's VSM settings are
+stated: `VSM_SOLVER_DEFAULTS` (Solver kwargs) and `VSM_BODY_DEFAULTS`
+(`BodyAerodynamics.instantiate` kwargs). Build every VSM object through
+`make_vsm_solver(**overrides)` / `BodyAerodynamics.instantiate(...,
+**vsm_body_kwargs())`, never a bare `Solver()`, whose defaults follow the
+installed VSM (develop: `is_aoa_corrected=True`, automatic relaxation).
+The model (2026-10-28, VSM develop 1201f6f): 3/4-chord VSM, freestream force
+directions (`is_aoa_corrected=False`), the attached-trailed vortex force ON
+(`is_with_attached_trailed_vortex_force=True`), relaxation 0.01. Before that
+date AWETrim ran VSM 8825a12 without the attached-trailed force (built-shape
+polar: CL +2%, CD +4% at alpha 10 deg with it). An option the installed VSM
+lacks is dropped at its no-op value and refused otherwise. The aerostructural
+`aerodynamic:` block overrides any of the same keys.
+
+The CasADi trim mirrors that model: `panel_kernels.panel_forces` (drag along
+the section's own flow direction) plus `attached_trailed_geometry` /
+`attached_trailed_forces` / `boundary_shares` (one Kutta-Joukowski force per
+panel boundary, split half to either neighbour in `F_distribution`). The
+induction at the attached-trailed points is a numeric `(n+1, n)` matrix per
+axis, frozen per wake pass with the AIC (`CasadiTrim.compute_aic` returns six
+matrices), built ring by ring with VSM's `induced_velocity_at_points`.
+`CasadiTrimOptions.is_with_attached_trailed_vortex_force` switches it.
 
 `trim_casadi.py` (2026-09-15) solves the quasi-steady trim as ONE CasADi
 root-finding problem: unknowns = the 5 trim states + the panel circulations

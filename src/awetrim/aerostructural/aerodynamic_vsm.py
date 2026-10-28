@@ -29,7 +29,11 @@ import dataclasses
 import time
 from VSM.core.BodyAerodynamics import BodyAerodynamics
 from VSM.core.WingGeometry import Wing
-from VSM.core.Solver import Solver
+from awetrim.aerodynamics.vsm_settings import (
+    VSM_SOLVER_DEFAULTS,
+    make_vsm_solver,
+    vsm_body_kwargs,
+)
 from VSM.plot_geometry_matplotlib import plot_geometry
 from awetrim.aerodynamics.kcu_drag import KcuDragModel
 from awetrim.aerostructural.case import air_density_at_case
@@ -345,22 +349,47 @@ def _solve_trim_casadi(
 
     options = CasadiTrimOptions(
         tether_model=tether_model,
-        polar_interpolation=str(getattr(solver, "polar_interpolation", "linear")),
+        polar_interpolation=str(
+            getattr(solver, "polar_interpolation", VSM_SOLVER_DEFAULTS["polar_interpolation"])
+        ),
         is_with_artificial_viscosity=bool(
-            getattr(solver, "is_with_artificial_viscosity", False)
+            getattr(
+                solver,
+                "is_with_artificial_viscosity",
+                VSM_SOLVER_DEFAULTS["is_with_artificial_viscosity"],
+            )
         ),
         artificial_viscosity_factor=float(
-            getattr(solver, "artificial_viscosity_factor", 0.035)
+            getattr(
+                solver,
+                "artificial_viscosity_factor",
+                VSM_SOLVER_DEFAULTS["artificial_viscosity_factor"],
+            )
         ),
         # Refused inside CasadiTrim when True: the kernels are the
         # freestream-direction law, so a config asking for the corrected
         # directions must run the least_squares trims.
-        is_aoa_corrected=bool(getattr(solver, "is_aoa_corrected", False)),
+        is_aoa_corrected=bool(
+            getattr(solver, "is_aoa_corrected", VSM_SOLVER_DEFAULTS["is_aoa_corrected"])
+        ),
+        is_with_attached_trailed_vortex_force=bool(
+            getattr(
+                solver,
+                "is_with_attached_trailed_vortex_force",
+                VSM_SOLVER_DEFAULTS["is_with_attached_trailed_vortex_force"],
+            )
+        ),
         include_gravity=bool(include_gravity),
         tolerance=float(tolerance),
-        rho=float(getattr(solver, "rho", 1.225)),
-        core_radius_fraction=float(getattr(solver, "core_radius_fraction", 0.05)),
-        aerodynamic_model_type=str(getattr(solver, "aerodynamic_model_type", "VSM")),
+        rho=float(getattr(solver, "rho", VSM_SOLVER_DEFAULTS["rho"])),
+        core_radius_fraction=float(
+            getattr(solver, "core_radius_fraction", VSM_SOLVER_DEFAULTS["core_radius_fraction"])
+        ),
+        aerodynamic_model_type=str(
+            getattr(
+                solver, "aerodynamic_model_type", VSM_SOLVER_DEFAULTS["aerodynamic_model_type"]
+            )
+        ),
     )
 
     # One graph per (polars, counts, options, system model), cached on the
@@ -479,6 +508,7 @@ def initialize(
             "spanwise_panel_distribution"
         ],
         bridle_path=bridle_path,
+        **vsm_body_kwargs(),
     )
     # The bridle-line drag law reads one diameter per segment, and the
     # structural table stores flat tapes as an AREA-equivalent circle --
@@ -501,41 +531,22 @@ def initialize(
             )
 
     aero_cfg = config["aerodynamic"]
-    vsm_solver = Solver(
-        max_iterations=aero_cfg["max_iterations"],
-        allowed_error=aero_cfg["allowed_error"],
-        relaxation_factor=aero_cfg["relaxation_factor"],
-        reference_point=aero_cfg["reference_point"],
-        mu=config["mu"],
-        rho=air_density_at_case(config),
-        # Optional post-stall stabilization: the parameter-free Li/Gaunaa
-        # spanwise artificial viscosity (TORQUE 2026), applied in the base
-        # gamma loop. Off by default to preserve historical behaviour.
-        is_with_artificial_viscosity=aero_cfg.get(
-            "is_with_artificial_viscosity", False
-        ),
-        artificial_viscosity_factor=aero_cfg.get("artificial_viscosity_factor", 0.035),
-        # Inner circulation solver. "base" is the relaxed-Picard loop and stays
-        # the default. "anderson" is Anderson-accelerated (O(10s) rather than
-        # O(100s) of iterations) but terminates on a superlinear, non-smooth
-        # residual, which corrupts the finite-difference Jacobian of the QSM
-        # trim this solver calls unless `allowed_error` is ~1e-8. Set the two
-        # together or not at all.
-        gamma_loop_type=aero_cfg.get("gamma_loop_type", "base"),
-        # Force directions from the freestream (VSM ``is_aoa_corrected``):
-        # False is the model every AWETrim result is built on and what the
-        # CasADi trim kernels reproduce. VSM develop flipped its own default
-        # to True on 2026-09-17 (quarter-chord flow), so it is stated here.
-        is_aoa_corrected=bool(aero_cfg.get("is_aoa_corrected", False)),
-        # Anderson headroom instead of the Picard fallback (2026-09-03):
-        # across the 2019+2025 steering campaigns the base-loop fallback
-        # rescued 99 of ~92,400 Anderson failures (0.1%) while costing up to
-        # two 1500-iteration base loops per failure. 1000 / False are the
-        # VSM defaults too; the keys exist so a kite config can dial back.
-        anderson_max_iterations=int(aero_cfg.get("anderson_max_iterations", 1000)),
-        anderson_fallback_to_base=bool(
-            aero_cfg.get("anderson_fallback_to_base", False)
-        ),
+    # AWETrim's VSM settings (awetrim.aerodynamics.vsm_settings), overridden
+    # by any of the same keys in the case's ``aerodynamic`` block (as_config:
+    # relaxation_factor, the anderson loop, artificial viscosity, ...). Two
+    # are model choices, not numerics: ``is_aoa_corrected`` (force directions
+    # from the quarter-chord flow; the CasADi trim kernels implement False
+    # only) and ``is_with_artificial_viscosity`` (Li/Gaunaa post-stall
+    # regularisation). ``gamma_loop_type: anderson`` terminates on a
+    # non-smooth residual that corrupts the FD Jacobian of the QSM trim unless
+    # ``allowed_error`` is ~1e-8: set the two together or not at all.
+    vsm_solver = make_vsm_solver(
+        **{
+            **{key: aero_cfg[key] for key in VSM_SOLVER_DEFAULTS if key in aero_cfg},
+            "reference_point": aero_cfg["reference_point"],
+            "mu": config["mu"],
+            "rho": air_density_at_case(config),
+        }
     )
 
     # For QSM, wind speed comes from system model configuration (wind_speed_wind_ref).
