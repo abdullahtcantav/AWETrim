@@ -131,11 +131,14 @@ configure_kite(DEFAULT_KITE)
 # biases the optimum toward the seed, so a second, warm-started polish stage
 # re-anchors at the main optimum with 10x less weight and shakes the bias out.
 #
-# ``step_bounds`` remains only as a BACKSTOP box (hard +/-delta per solve):
-# the main stage's box is sized to the old scheme's total 4-pass travel
-# budget and should never be active -- the driver warns when it is. The
-# polish keeps the old tight box; warm-started from the main optimum it
-# should sit strictly inside it.
+# ``step_bounds`` is a hard +/-delta box per solve. The closing stage keeps a
+# tight one (+/-0.15 rad, +/-50 m): it needs only a small move, and a wider
+# box let it reshape the pattern or stall locally infeasible. The power and
+# polish boxes are 4x that: a box-scale study (LEI-V3, 7 half-figures, 2026-10-28)
+# found the tight box binding at the optimum and costing 3% of the power at
+# 6-10 m/s at 100 m and 15% at 12 m/s; with this split every case converged
+# without a topology change, at the best power of all variants (1.45 / 8.26 /
+# 11.64 kW at 6 / 10 / 12 m/s). The driver warns when a box is active.
 STAGES = [
     # Feasibility first: the seed's forward simulation marches the seed's
     # force law and is generally OPEN (the free_speed NLP drops that law), so
@@ -163,6 +166,10 @@ STAGES = [
         "warm_start": False,
         "trust_region_weight": 0.05,
         "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 50.0},
+        # This stage needs only a small move; a wider box let it reshape the
+        # pattern (10 m/s at 100 m) or stall locally infeasible (12 m/s), so
+        # --step-scale leaves it alone.
+        "scale_box": False,
     },
     # ``r0`` frees the operating radius: the NLP's node-0 radius pin follows
     # the r0 parameter (seeded from path_parameters["r0"], bounded by
@@ -179,7 +186,7 @@ STAGES = [
         # polish stage still moves the shape far.
         "warm_start": True,  # tight-barrier start from the closed point
         "trust_region_weight": 0.2,
-        "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 50.0},
+        "step_bounds": {"C_phi": 0.6, "C_beta": 0.6, "r0": 200.0},
         "repeat": 1,  # old scheme: 4 passes, re-centered each time; new scheme: 1 pass
     },
     {
@@ -189,7 +196,7 @@ STAGES = [
         "hard_close": True,
         "trust_region_weight": 0.005,
         "warm_start": True,  # tight-barrier IPOPT start from the main optimum
-        "step_bounds": {"C_phi": 0.15, "C_beta": 0.15, "r0": 100.0},
+        "step_bounds": {"C_phi": 0.6, "C_beta": 0.6, "r0": 400.0},
     },
 ]
 
@@ -576,9 +583,11 @@ def main(
         # the remedy when a run ends with the backstop step box active.
         STAGES[1]["repeat"] = int(stage_repeats)
     if step_scale:
-        # Every stage's backstop box scaled by one factor (a study knob; 1 =
-        # the boxes above).
+        # The power stages' backstop boxes scaled by one factor (1 = the boxes
+        # above); a stage with scale_box False (the closing stage) keeps its own.
         for stage in STAGES:
+            if not stage.get("scale_box", True):
+                continue
             stage["step_bounds"] = {
                 k: float(v) * float(step_scale)
                 for k, v in (stage.get("step_bounds") or {}).items()
@@ -809,8 +818,8 @@ if __name__ == "__main__":
         "--step-scale",
         type=float,
         default=None,
-        help="Scale every stage's backstop step box (C_phi, C_beta, r0) by this "
-        "factor (default 1)",
+        help="Scale the power and polish stages' backstop step boxes (C_phi, "
+        "C_beta, r0) by this factor (default 1; the closing stage keeps its box)",
     )
     parser.add_argument(
         "--wind-speed",
