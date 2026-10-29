@@ -6,7 +6,7 @@ Opt-in: every test here is marked ``slow`` and is deselected from the default
     pytest -m slow -o addopts="" tests/aerostructural/test_wireframe_solver_slow.py
 
 These run the production path, ``wireframe.driver.solve_deformation`` without
-a geometry path: the wireframe reduced from the kite's FEM geometry with the
+a geometry path: the wireframe reduced from the kite's structure.yml with the
 bridle relaxed onto the built wing (``build_case_reduced_fem``), as the public
 ``examples/2_aerostructural/run_simulation_PSM.py`` does. The 2019 as-flown
 system, at the built tape and at 0.0 and 0.2 m steering, with gravity and

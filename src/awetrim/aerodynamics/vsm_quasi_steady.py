@@ -52,8 +52,8 @@ DEFAULT_AXES = AxisDefinition(
 #: Station of the KCU in the VSM geometry frame.
 #:
 #: The KCU hangs at the BRIDLE POINT, which is the origin of the structural
-#: geometry -- ``bridle_point_node: [0, 0, 0]`` in every shipped
-#: ``struc_geometry*.yaml``, LEI-V3 and LEI-V9 alike. It is deliberately NOT
+#: geometry -- the KCU point (``Structure.kcu``) sits at the wing origin in
+#: every shipped ``structure.yml``, LEI-V3 and LEI-V9 alike. It is deliberately NOT
 #: written as ``reference_point``: the two coincide only because every shipped
 #: ``as_config`` also puts the moment reference at the origin, and the KCU does
 #: not move when that bookkeeping choice does.

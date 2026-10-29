@@ -21,8 +21,8 @@ src/awetrim/
                           aerostructural path via is_with_kcu_drag)
                          + bridle-line SECTION drag (line_drag.py): the
                          steering/depower lines are flat 12 mm tapes, not
-                         round cable; declared by a "w" column in
-                         struc_geometry bridle_lines and applied as a
+                         round cable; declared by a "tape_width" column
+                         on the structure's segments and applied as a
                          drag-equivalent diameter (as_config
                          aerodynamic_bridle.tape_roll_model)
                          + apparent_wind.py: THE single source of
@@ -46,8 +46,13 @@ src/awetrim/
     coupled/         ✅  The coupled solve itself, backend-agnostic.
                          coupled_solver.py dispatches over wireframe / billow,
                          so a new backend is a branch there, not a copy;
-                         read_struc_geometry_yaml.py is the ONE geometry reader
-                         both consume and aero2struc.py the ONE load transfer.
+                         awesio_structure.py is the ONE geometry reader
+                         (load_structure -> Structure, an awesIO
+                         structure document; Structure.resolved() is the
+                         full model's solver arrays) both consume, and
+                         aero2struc.py the ONE load transfer.
+                         read_struc_geometry_yaml.py now only imports the
+                         retired struc_geometry_FEM_full format.
                          aero2struc.chordwise_distribution offers
                          "moment_matched", which places each panel's load at
                          its own centre of pressure so the LOCAL pitching
@@ -61,8 +66,8 @@ src/awetrim/
     billow/          ✅  Adapter for Billow's FULL fidelity: inflatable
                          Timoshenko tube beams and wrinkling CST membrane
                          canopy on top of the same cables and pulleys. Reads
-                         struc_geometry_FEM_full.yaml (the only geometry with
-                         tubes and pressure). Converged on the LEI-V3
+                         the kite's structure.yml (awesIO; its tubes and
+                         pressure). Converged on the LEI-V3
                          unactuated baseline
   kinematics/        ✅  course-frame kinematics, B-spline path patterns
                          (+ the slanted up-loop figure eight of the
@@ -429,8 +434,8 @@ Notes
 
 Each kite under `data/<kite_name>/` should include at minimum the following files and folders so scripts and tools can locate inputs automatically:
 
-- `system.yaml` — hardware and system-level configuration (kite mass, KCU, tether properties, winch, mass/inertia). This is the primary source for `SystemModel` properties. The `SystemModel`'s point-mass wing is `wing.structure.mass` (canopy) PLUS `bridle.structure.mass` (since 2026-10-29; before, the bridle was missing from the trim); the geometry-derived wing/bridle fields are re-derived from `struc_geometry_FEM_full.yaml` by `utils.system_yml_sync` (the flown files keep their as-flown wing mass and the EKF reference area 19.75 m2). **KCU mass is the single source of truth here** (`components.kite.control_system.structure.mass`, plus the separate `mass` of an optional onboard turbine, awesIO `control_system.turbine.structure` {`rotor_diameter`, `mass`, `position_KA`}); both the structural KCU node mass and the QSM `mass_kcu` are resolved from it through `utils.system_config.get_kcu_mass`, which adds the two -- never read `structure.mass` directly. **The winch drive envelope is the single source of truth here too** (`components.ground_station.drums[0]`: `min_tether_speed` / `max_tether_speed` / `max_winch_acceleration` / `max_tether_force`); `factory._extract_hardware_limits` maps it onto the optimizer's `speed_radial` bounds and the `winch_acceleration` slew limit, so cycle configs must not restate it.
-- `struc_geometry_FEM_full.yaml` — THE structural geometry (`aerostructural.case.DEFAULT_STRUC_GEOMETRY_FILENAME`): wing nodes, strut and leading-edge tubes, inflation pressure, the full bridle with its pulleys and rest lengths. Billow full reads it; the wireframe reduces it on the fly (`wireframe.reduce_fem`); the step-1 aerodynamics take the bridle and the mass/inertia from it. A deformed results folder holds a PSM-format snapshot, `struc_geometry.yaml` (`case.find_struc_geometry` finds either). The PSM wireframe files were removed on 2026-10-29 (in v0.1.0). A `bridle_lines` row may carry an optional `w` (flat-tape width [m]); `d` then stays the AREA-equivalent diameter used for mass and EA, while the drag uses the projected width (`awetrim.aerodynamics.line_drag`). Does **not** carry `kcu_mass` (deprecated; ignored with a warning if present — set it in `system.yaml`). A deformed snapshot may carry an optional `bridle_connection_rest_lengths` block (per-connection rest lengths of actuated tapes, e.g. a steered state, where both steering tapes share one `bridle_lines` row); both geometry readers apply it.
+- `system.yaml` — hardware and system-level configuration (kite mass, KCU, tether properties, winch, mass/inertia). This is the primary source for `SystemModel` properties. The `SystemModel`'s point-mass wing is `wing.structure.mass` (canopy) PLUS `bridle.structure.mass` (since 2026-10-29; before, the bridle was missing from the trim); the geometry-derived wing/bridle fields are re-derived from `structure.yml` by `utils.system_yml_sync` (the flown files keep their as-flown wing mass and the EKF reference area 19.75 m2). **KCU mass is the single source of truth here** (`components.kite.control_system.structure.mass`, plus the separate `mass` of an optional onboard turbine, awesIO `control_system.turbine.structure` {`rotor_diameter`, `mass`, `position_KA`}); both the structural KCU node mass and the QSM `mass_kcu` are resolved from it through `utils.system_config.get_kcu_mass`, which adds the two -- never read `structure.mass` directly. **The winch drive envelope is the single source of truth here too** (`components.ground_station.drums[0]`: `min_tether_speed` / `max_tether_speed` / `max_winch_acceleration` / `max_tether_force`); `factory._extract_hardware_limits` maps it onto the optimizer's `speed_radial` bounds and the `winch_acceleration` slew limit, so cycle configs must not restate it.
+- `structure.yml` — THE structural geometry (`aerostructural.case.DEFAULT_STRUC_GEOMETRY_FILENAME`), an awesIO structure document (`structure_schema.yml`, awesIO 0.1.0) read with `aerostructural.coupled.awesio_structure.load_structure`: the FULLY RESOLVED model (every node, incl. strut padding and canopy chord nodes), tubes on one-point bodies (Breukels law, pressure in Pa), canopy faces, the full bridle as segments (a pulley = two arm segments, each with its own `rest_length`; the rope is their sum) and masses by awesIO's rule (lines and fabric derived by the reader, pulleys and tubes as extra mass). Billow full reads it; the wireframe reduces it on the fly (`wireframe.reduce_fem`); the step-1 aerodynamics take the bridle and the mass/inertia from it. AWETrim's own columns on `segments`: `line` (the bridle line; `depower_tape` / `steering_tape` are actuated), `linktype`, `tape_width` (flat-tape drag width [m]; `diameter` stays the AREA-equivalent one used for mass and EA, `awetrim.aerodynamics.line_drag`); the top-level `awetrim` block names `kcu_point` and `pulley_mass`. Does **not** carry the KCU mass (`system.yaml` is its single source; `Structure.resolved(kcu_mass=...)`). A deformed results folder holds a snapshot under the same name, a WIREFRAME document (wing members as segments with AWETrim's `stiffness` / `damping` / `mass` columns); `case.find_struc_geometry` finds it. Until 2026-10-29 the geometry was `struc_geometry_FEM_full.yaml` and snapshots PSM-format `struc_geometry.yaml`: `load_structure` converts both on the fly (DeprecationWarning); convert once with `python -m awetrim.aerostructural.coupled.awesio_structure OLD NEW`. Rest-length edits change a segment's `rest_length`; rewrite through `Structure.write` to refresh `metadata.connectivity_sha`.
 - `aero_geometry.yaml` — VSM aerodynamic geometry describing wing sections, paneling, and references to airfoil polars; may reference a subfolder with airfoil `.dat` or polar CSVs.
 - `as_config.yaml` (or `aerostructural_configs/config.yaml`) — aerostructural solver settings (time-step, tolerances, actuation options, initialisation flags).
 - `rom_config*.yaml` — reduced-order aerodynamic coefficient definitions (one file per ROM; `system.yaml` `models.reduced_order.aerodynamics` names the one in use, else a sibling `rom_config.yaml` is used) (plus ROM tether settings) used by ROM or identification flows. A `controls.input_depower: {powered, depowered}` block states the depower band the ROM was identified on, in the ROM's own `u_p` unit (`identification.controls.rom_depower_band`; required, there is no default). An optional `validity.angle_of_attack_deg: [lo, hi]` states the AoA range the ROM was identified on (the full-cycle optimizer's AoA bound).

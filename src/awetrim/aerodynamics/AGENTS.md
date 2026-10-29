@@ -197,7 +197,7 @@ force at the kite, so it cannot call a point kernel at all. Both are CasADi.
 geometry origin): **both** halves of the KCU force — its inflow and its moment
 arm `station - r0` — are driven from that one symbol, so they cannot drift.
 `tests/aerodynamics/test_apparent_wind_kernel.py` locks that every shipped
-`struc_geometry*.yaml` really does put `bridle_point_node` there.
+`structure.yml` really does put its KCU point (`Structure.kcu`) there.
 
 `kcu_drag.py` owns a dependency-light (numpy only, **no VSM/CasADi**) bluff-body
 drag model for the **kite control unit**, treated as a finite cylinder hanging on
@@ -241,13 +241,19 @@ KCU, -z = hanging) is not used: the turbine is lumped at the KCU.
 coefficient the crossflow law has always used, and the flat-tape model added
 2026-08-21 for the steering/depower webbing. It is numpy-free at the physics
 level (plain `math`) and knows nothing about VSM. The problem it solves:
-`struc_geometry.yaml` stores a 12 x 1.5 mm tape as an AREA-equivalent circle
-(`d_eq = sqrt(4wt/pi)` = 4.787307 mm on LEI-V3), which is correct for line mass
+the structure file (awesIO `structure.yml`) stores a 12 x 1.5 mm tape as an
+AREA-equivalent circle (`d_eq = sqrt(4wt/pi)` = 4.787307 mm on LEI-V3), which
+is correct for line mass
 and EA and meaningless for drag -- drag follows the projected WIDTH. Public API:
 `tape_thickness_from_equivalent_diameter`, `cd_width_round`, `cd_width_tape`,
-`drag_diameter_tape`, `bridle_drag_diameters(struc_geometry, roll_model,
-cd_cable)`, `apply_bridle_drag_diameters(body_aero, ...)` (in-place on
+`drag_diameter_tape`, `bridle_drag_diameters(structure, roll_model,
+cd_cable)` (one per `Structure.bridle_segments` row),
+`apply_bridle_drag_diameters(body_aero, structure, ...)` (in-place on
 `_bridle_line_system`, returns the number of segments changed),
+`attach_bridle_lines(body_aero, structure, ...)` (sets `_bridle_line_system`
+from `Structure.bridle_line_system()`, then applies the drag diameters: the ONE
+way every builder gives a VSM body its bridle, since VSM's own
+`instantiate(bridle_path=...)` parses only the retired geometry format),
 `lines_missing_width`, `tape_summary` and `settings_from_config` (the single
 source of the `aerodynamic_bridle.tape_roll_model` / `cd_cable` YAML key names).
 
@@ -257,11 +263,12 @@ Three things to know before touching it:
   line system's third slot, because `cd_cable` is baked into VSM's line-force
   call. `d_drag = cd_width / cd_cable`. It must never be written back into a
   structural table.
-- A tape is declared by an optional `w` column (width [m]) on a `bridle_lines`
-  row -- rows without it keep the round law, so kites whose tape width is
-  unknown (LEI-V9) are unaffected. `lines_missing_width` warns when a row is
-  *named* like a tape but declares no width, which is how legacy deformed
-  snapshots would otherwise regress silently.
+- A tape is declared by the optional `tape_width` column [m] of its
+  `segments` rows -- segments without it keep the round law, so kites whose
+  tape width is unknown (LEI-V9) are unaffected. `lines_missing_width` warns
+  when a `line` is *named* like a tape but declares no width, which is how
+  legacy deformed snapshots would otherwise regress silently. Every function
+  takes a `Structure` or anything `load_structure` accepts.
 - `roll_model` is a real modelling choice, not a tuning knob: the tape's roll
   angle about its own axis is not in the geometry and the broadside and edge-on
   limits differ by **18x**. `averaged` (default) is the uniform-roll mean,

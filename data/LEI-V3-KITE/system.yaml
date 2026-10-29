@@ -32,8 +32,8 @@ components:
         span: 8.3052                   # m
         mass: 11.0                     # kg
         # Canopy-only (no bridle, KCU or canopy-mounted equipment), from
-        # struc_geometry_FEM_full.yaml (awetrim.utils.system_yml_sync.
-        # compute_wing_stats_from_fem). CG and inertia are in that file's
+        # structure.yml (awetrim.utils.system_yml_sync.
+        # compute_wing_stats). CG and inertia are in that file's
         # frame: origin at the bridle point (KCU), x chordwise LE -> TE,
         # y spanwise, z up towards the wing. The inertia is about the CG, along
         # those axes (not principal axes), with products -sum(m x z).
@@ -59,7 +59,7 @@ components:
       version: 1.0
       structure:
         bridle_point_node: [0, 0, 0]
-        # From struc_geometry_FEM_full.yaml (compute_bridle_stats_from_pss)
+        # From structure.yml (system_yml_sync.compute_bridle_stats)
         total_nominal_line_length: 86.548    # m, sum of unique bridle_line l0 values
         avg_line_diameter: 0.00283           # m, connection-length-weighted average
         mass: 2.5848                         # kg, lines + pulleys

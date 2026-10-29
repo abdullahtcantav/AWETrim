@@ -6,7 +6,7 @@ is a wireframe: one rib per strut with two wing nodes (where the front and rear
 bridle attach), the leading edge and struts as stiff axial springs, the canopy
 as tension-only springs, and the bridle with its pulleys. It is reduced from
 the SAME geometry file run_simulation_BILLOW.py reads
-(struc_geometry_FEM_full.yaml) -- the per-strut line fans collapsed to one
+(structure.yml, awesIO) -- the per-strut line fans collapsed to one
 equivalent line each, the tube and canopy stiffnesses taken from the Billow
 materials -- so with the same inputs the two scripts differ only in the
 structural model. The reduced geometry is saved in the case folder. (The
@@ -36,7 +36,7 @@ from awetrim.aerostructural.wireframe.driver import solve_deformation  # noqa: F
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
-KITE = "LEI-V3-KITE"  # a folder under data/ with a struc_geometry_FEM_full.yaml
+KITE = "LEI-V3-KITE"  # a folder under data/ with a structure.yml
 SYSTEM_FILE = "system.yaml"  # in data/<KITE>/: masses (KCU) and tether
 
 # Flight state. Angles are those of the course-aligned spherical frame: the

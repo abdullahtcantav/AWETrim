@@ -377,10 +377,11 @@ def _bridle_line_specs_for_vsm(body_aero, bridle_connectivity_arr):
     The indices come from the reader, which owns the structural array; the
     diameters from the body's own segments, which ``aerodynamic_vsm.initialize``
     has already replaced with the DRAG-equivalent ones (a flat tape's projected
-    width, not its area-equivalent circle). Both lists are the same parse of
-    ``bridle_connections`` in the same order -- verified on the LEI-V3
-    FEM_full geometry, where the two agree on all 87 segments to 7.6e-9 m --
-    and the count check below catches a geometry where that stops holding.
+    width, not its area-equivalent circle). Both lists are the structure's
+    bridle segments in document order (``Structure.bridle_segments``) --
+    verified on the LEI-V3 full model, where the two agree on all 87 segments
+    to 7.6e-9 m -- and the count check below catches a geometry where that
+    stops holding.
     """
     lines = getattr(body_aero, "_bridle_line_system", None)
     if not lines or bridle_connectivity_arr is None:

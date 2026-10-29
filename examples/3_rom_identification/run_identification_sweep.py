@@ -4,8 +4,8 @@ Coupled VSM + Billow states at the centre of the wind window, gravity off,
 along continuation chains, at either structural fidelity (`fidelity` in
 identification.yaml, or --fidelity): `billow`, the full model (tube beams,
 membrane canopy, bridle), or `wireframe`, the bridle line system. The
-wireframe is reduced from the same full FEM file (`fem_geometry`, default the
-kite's struc_geometry_FEM_full.yaml) and flies its full-chord aerodynamic mesh
+wireframe is reduced from the same full structure file (`fem_geometry`,
+default the kite's awesIO structure.yml) and flies its full-chord aerodynamic mesh
 (wireframe.driver.build_case_reduced_fem: one structural file for both
 fidelities; billowed with aerodynamic.billowing.contraction, loads moved with
 aerodynamic.load_transfer: strut_lever):
@@ -168,7 +168,7 @@ def open_case(fidelity: str, spec: dict, kite: str):
 
         config_path, _, _ = resolve_kite_paths(PROJECT_DIR, kite)
         config = merge_config(load_yaml(config_path), spec.get("config_overrides"))
-        # the wireframe reduced from the full FEM file (one structural file
+        # the wireframe reduced from the full structure (one structural file
         # for both fidelities), its aero mesh the full geometry's (billowed
         # when aerodynamic.billowing.contraction > 0)
         case = driver.build_case_reduced_fem(

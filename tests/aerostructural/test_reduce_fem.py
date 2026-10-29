@@ -1,4 +1,4 @@
-"""Tests for awetrim.aerostructural.wireframe.reduce_fem (FEM_full -> wireframe).
+"""Tests for awetrim.aerostructural.wireframe.reduce_fem (structure.yml -> wireframe).
 
 The reference numbers are frozen from ``struc_geometry_PSM_reduced.yaml``
 (removed 2026-10-29; in the v0.1.0 release), an exact reduction of the full
@@ -11,21 +11,21 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import yaml
 
+from awetrim.aerostructural.coupled.awesio_structure import load_structure
 from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "LEI-V3-KITE"
 
 
-def _load(name):
-    with (DATA / name).open(encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
+@pytest.fixture(scope="module")
+def structure():
+    return load_structure(DATA / "structure.yml")
 
 
 @pytest.fixture(scope="module")
-def reduced():
-    return reduce_fem_geometry(_load("struc_geometry_FEM_full.yaml"))
+def reduced(structure):
+    return reduce_fem_geometry(structure)
 
 
 #: struc_geometry_PSM_reduced.yaml's wing nodes [m], shifted by +0.0466 m in z
@@ -105,15 +105,54 @@ def test_wing_topology_and_compressive_tubes(reduced):
     assert linktype["te_1"] == linktype["dia_1a"] == "noncompressive"
 
 
-def test_masses_are_conserved():
-    fem = _load("struc_geometry_FEM_full.yaml")
-    ids = [0] + [int(r[0]) for k in ("wing_particles", "bridle_particles") for r in fem[k]["data"]]
-    nodes = np.zeros((max(ids) + 1, 3))
-    for k in ("wing_particles", "bridle_particles"):
-        for r in fem[k]["data"]:
-            nodes[int(r[0])] = r[1:4]
-    masses = np.full(len(nodes), 0.1)
-    masses[0] = 8.0
-    reduced = reduce_fem_geometry(fem, nodes=nodes, masses=masses)
+def test_masses_are_conserved(structure):
+    masses = np.full(len(structure.positions), 0.1)
+    masses[structure.kcu] = 8.0
+    reduced = reduce_fem_geometry(structure, nodes=structure.positions, masses=masses)
     total = reduced["reduction"]["wing_mass"] + reduced["reduction"]["bridle_mass"]
-    assert total == pytest.approx(masses[1:].sum(), rel=1e-6)
+    assert total == pytest.approx(masses.sum() - 8.0, rel=1e-6)
+
+
+def test_without_masses_the_structure_is_weighed(structure, reduced):
+    """The wireframe weighs what the full structure does, KCU aside."""
+    total = reduced["reduction"]["wing_mass"] + reduced["reduction"]["bridle_mass"]
+    masses = structure.masses()
+    assert total == pytest.approx(masses.sum() - masses[structure.kcu], rel=1e-6)
+
+
+def test_tube_stiffness_comes_from_the_tubes(structure, reduced):
+    """Strut members at the strut's mean diameter: the length-weighted mean of
+    its elements, which is the retired file's (d_le + d_te) / 2 exactly."""
+    from awetrim.aerostructural.billow.structural_billow import tube_axial_stiffness
+
+    # ribs run +y to -y like the struts: the 5th (structure "strut_4", after
+    # the tip rib "le_tip_start") is the wireframe's strut_5
+    strut = structure.struts[4]
+    assert strut["name"] == "strut_4"
+    old_mean = 0.5 * (0.140834 + 0.105972)  # strut_diam_le / _te of the old file
+    nodes = strut["nodes"]
+    lengths = np.linalg.norm(np.diff(structure.positions[nodes], axis=0), axis=1)
+    assert np.dot(lengths, strut["diameters"]) / lengths.sum() == pytest.approx(old_mean, abs=1e-9)
+    k = {r[0]: r[2] for r in reduced["wing_elements"]["data"]}
+    ends = {r[0]: (r[1], r[2]) for r in reduced["wing_connections"]["data"]}
+    pos = {r[0]: np.array(r[1:4]) for r in reduced["wing_particles"]["data"]}
+    a, b = ends["strut_5"]
+    ea = tube_axial_stiffness([old_mean], structure.pressure_bar)[0]
+    assert k["strut_5"] == pytest.approx(ea / np.linalg.norm(pos[a] - pos[b]), rel=1e-9)
+
+
+def test_a_retired_fem_file_still_reduces_the_same(reduced):
+    """The old struc_geometry_FEM_full.yaml converts on the fly (with a warning)."""
+    import yaml
+
+    legacy = Path(__file__).resolve().parents[1] / "data" / "legacy" / "struc_geometry_FEM_full.yaml"
+    with legacy.open(encoding="utf-8") as handle:
+        fem = yaml.safe_load(handle)
+    with pytest.warns(DeprecationWarning):
+        again = reduce_fem_geometry(fem)
+    assert again["bridle_connections"] == reduced["bridle_connections"]
+    np.testing.assert_allclose(
+        [r[1:] for r in again["wing_particles"]["data"]],
+        [r[1:] for r in reduced["wing_particles"]["data"]],
+        atol=1e-9,
+    )

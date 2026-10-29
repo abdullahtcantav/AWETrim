@@ -13,7 +13,7 @@
 # --fidelity to override it, and write under
 # results/<kite>/identification/<fidelity>/.
 #   billow     Billow's FULL model: inflatable tube beams, wrinkling membrane
-#              canopy and the bridle (struc_geometry_FEM_full.yaml).
+#              canopy and the bridle (structure.yml, awesIO).
 #   wireframe  Billow's line system, REDUCED from the same full FEM file
 #              (wireframe.driver.build_case_reduced_fem: one structural file
 #              for both fidelities), flying the full geometry's aerodynamic
@@ -72,7 +72,7 @@ sweep:
       steering:
         power_tape_lengths: [2.10, 2.40]
     wireframe:
-      fem_geometry: struc_geometry_FEM_full.yaml
+      fem_geometry: structure.yml
       system_file: system_flown_2019.yaml   # the hardware the shipped ROM used
       # No bridle_modulus_factor: the FEM file's Dyneema is already the
       # datasheet 109 GPa (the PSM file's 10 GPa needed x9). The fixed-

@@ -14,8 +14,9 @@ The sweep runs at either structural fidelity of step 2 (`fidelity:` in the
 file, or `--fidelity` on both scripts):
 
 - `billow`: the full model, with inflatable tube beams, a wrinkling membrane
-  canopy and the bridle, built from `struc_geometry_FEM_full.yaml`.
-- `wireframe`: the bridle line system on the PSM wireframe geometry, the model
+  canopy and the bridle, built from the kite's awesIO `structure.yml`.
+- `wireframe`: the bridle line system on the wireframe reduced from the same
+  `structure.yml` (written per case as `structure_wireframe.yml`), the model
   the shipped LEI-V3 ROM was identified on. Its bridle runs at a fixed 9x
   modulus, tapes included, with no in-loop stiffening, so every state in the
   sweep is the same kite.

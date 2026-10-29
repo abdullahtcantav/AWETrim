@@ -27,7 +27,7 @@ Two things to know before reading a result:
   against measured node positions and the two disagree (``Br_main_1`` is 11.5%
   long, 88 kN at the real ``EA/l0``). ``structural_billow.instantiate`` settles
   the bridle onto the held wing before the loop starts, so the nodes the loop
-  starts from are not the raw YAML nodes.
+  starts from are not the raw ``structure.yml`` nodes.
 * **The canopy is a membrane, not a spring net.** The wing's canopy springs are
   replaced by wrinkling triangles on the same grid.
 """
@@ -57,7 +57,8 @@ from awetrim.aerostructural.case import (
     resolve_kite_paths,
 )
 from awetrim.aerostructural.case_view import build_case_view, save_case_view
-from awetrim.aerostructural.coupled import coupled_solver, read_struc_geometry_yaml
+from awetrim.aerostructural.coupled import coupled_solver
+from awetrim.aerostructural.coupled.awesio_structure import Structure, load_structure
 from awetrim.aerostructural.mapping import BilinearAeroToStructuralLoadMapper
 from awetrim.aerostructural.results import (
     aerostructural_results_root,
@@ -67,11 +68,11 @@ from awetrim.aerostructural.results import (
     save_input_snapshot,
     save_sim_output,
 )
-from awetrim.aerostructural.utils import load_yaml, rotate_geometry
+from awetrim.aerostructural.utils import load_yaml, resolve_structure, rotate_geometry
 from awetrim.utils.config_paths import REPO_ROOT
 
 #: Billow needs strut tubes, leading-edge tubes and an inflation pressure, so it
-#: reads the full geometry -- the kite's one structural file.
+#: reads the full model -- the kite's one structural file (awesIO).
 STRUC_GEOMETRY_FILENAME = DEFAULT_STRUC_GEOMETRY_FILENAME
 
 #: Settings this driver applies over the kite's ``as_config.yaml`` before the
@@ -132,7 +133,7 @@ class BillowCase:
     config: dict
     system_config: dict
     system_config_path: Path
-    struc_geometry: dict
+    struc_geometry: Structure
     aero_geometry: dict
     body_aero: Any
     vsm_solver: Any
@@ -145,7 +146,7 @@ class BillowCase:
 class PreparedStructure:
     """One live Billow model, ready to be solved (and solved again).
 
-    ``reader`` keeps the geometry reader's arrays by name; ``struc_nodes`` and
+    ``reader`` keeps ``Structure.resolved``'s arrays by name; ``struc_nodes`` and
     ``m_arr`` are the MODEL's (``instantiate`` relaxes the bridle and may add
     nodes), and ``canopy_sections`` the membrane's grid the load is mapped on.
     The VSM objects are this structure's own copies: the body is mutated onto
@@ -153,7 +154,7 @@ class PreparedStructure:
     more of the same iteration.
     """
 
-    geometry: dict
+    geometry: Structure
     structure: Any
     reader: dict
     struc_nodes: np.ndarray
@@ -223,9 +224,11 @@ def build_case(
     )
     resolve_config_paths(config, project_dir)
 
-    struc_geometry = load_yaml(struc_geometry_path)
+    struc_geometry = load_structure(struc_geometry_path)
+    if struc_geometry.is_wireframe:
+        raise ValueError(f"{struc_geometry_path} is a wireframe; Billow needs the full model")
     aero_geometry = load_yaml(aero_geometry_path)
-    n_struc_ribs = len(struc_geometry["wing_particles"]["data"]) / 2
+    n_struc_ribs = len(struc_geometry.stations)
     n_panels_aero = (n_struc_ribs - 1) * config["aerodynamic"][
         "n_aero_panels_per_struc_section"
     ]
@@ -253,20 +256,18 @@ def build_case(
 
 
 def prepare_structure(case: BillowCase, config: Mapping[str, Any] | None = None):
-    """Read the geometry and build one Billow model, ready to be solved.
+    """Resolve the geometry and build one Billow model, ready to be solved.
 
-    ``config`` defaults to the case's. The reader MUTATES the geometry it is
-    handed (it pads the strut tubes' node indices), so every structure reads
-    its own copy.
+    ``config`` defaults to the case's. The KCU mass is the system file's
+    (``utils.resolve_kcu_mass``); the ``Structure`` itself is read-only, so
+    every structure shares the case's.
     """
     config = case.config if config is None else config
-    geometry = copy.deepcopy(case.struc_geometry)
+    geometry = case.struc_geometry
     reader = dict(
         zip(
             _READER_FIELDS,
-            read_struc_geometry_yaml.main(
-                geometry, config=config, system_config=case.system_config
-            ),
+            resolve_structure(geometry, config=config, system_config=case.system_config),
         )
     )
     # Rotate before the model is built, so the bridle relaxation and every
@@ -276,7 +277,7 @@ def prepare_structure(case: BillowCase, config: Mapping[str, Any] | None = None)
     )
     structure = structural_billow.instantiate(
         config=config,
-        struc_geometry=geometry,
+        structure=geometry,
         struc_nodes=struc_nodes,
         kite_connectivity_arr=reader["kite_connectivity"],
         l0_arr=reader["l0"],
@@ -447,7 +448,7 @@ def solve_deformation(
         ),
         results_dir,
         # No system.yaml sync: it derives wing statistics from the PSM
-        # geometry's wing_elements, which the full geometry does not have.
+        # geometry's wing_elements, which the full model does not have.
     )
 
     solved = (

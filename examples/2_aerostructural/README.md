@@ -17,13 +17,14 @@ Open one of the two scripts, edit the **Inputs** block at the top, and run it.
 | [`run_simulation_PSM.py`](run_simulation_PSM.py) | **Wireframe**: one rib per strut, the bridle with its pulleys, tubes as stiff axial springs, canopy as tension-only springs | under a minute |
 | [`run_simulation_BILLOW.py`](run_simulation_BILLOW.py) | **Full**: inflatable tube beams (leading edge, struts), a wrinkling membrane canopy and the complete bridle | about 1 min |
 
-Both read the same geometry file, `struc_geometry_FEM_full.yaml`, and fly the
+Both read the same geometry file, `structure.yml` (an awesIO structure
+document), and fly the
 same aerodynamic mesh with the same trim and tether model. With the same inputs
 (the two Inputs blocks are identical) they differ only in the structural model.
 The wireframe is reduced from the full geometry on the fly (one rib per strut,
 each strut's bridle fan collapsed to one equivalent line, tube and canopy
 stiffness from the Billow materials) and saved in the case folder as
-`struc_geometry_wireframe.yaml`. It is not the photogrammetry-corrected PSM
+`structure_wireframe.yml` (awesIO too). It is not the photogrammetry-corrected PSM
 geometry of the wes-quasi-steady paper; `awetrim.aerostructural.wireframe.driver.solve_deformation`
 still solves that one.
 
@@ -48,7 +49,7 @@ Each run writes its own case folder, named after its inputs, under
 
 - `sim_output.h5`: node positions, forces and the solver history
 - `case.json`: what to draw (wing, tubes, bridle lines with names and tensions) and the flight state
-- `config.yaml`, plus the deformed `aero_geometry.yaml` / `struc_geometry.yaml`, which other
+- `config.yaml`, plus the deformed `aero_geometry.yaml` / `structure.yml` (awesIO), which other
   scripts can reuse (e.g. `examples/1_aerodynamics/solve_single_state.py --deformed-from <case>`)
 
 Solver settings (tolerances, panel counts, the material model) come from the

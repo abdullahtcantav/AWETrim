@@ -30,10 +30,12 @@ from awetrim.aerostructural.case import (
     build_tether,
     DEFAULT_KITE_NAME,
     DEFAULT_STRUC_GEOMETRY_FILENAME,
+    WIREFRAME_STRUC_GEOMETRY_FILENAME,
     resolve_initial_geometry_rotation_kwargs,
     resolve_kite_paths,
 )
 from awetrim.aerostructural.case_view import build_case_view, save_case_view
+from awetrim.aerostructural.coupled.awesio_structure import load_structure
 from awetrim.aerostructural.billowing import panel_bays as panel_bays_by_construction
 from awetrim.aerostructural.mapping import (
     BilinearAeroToStructuralLoadMapper,
@@ -283,6 +285,8 @@ class WireframeCase:
     system_config: dict
     system_config_path: Path
     struc_geometry_path: Path
+    #: The wireframe as the PSM-format dict ``structural_geometry_io`` reads
+    #: (``structure.wireframe_dict()``), an in-memory intermediate.
     struc_geometry: dict
     aero_geometry: dict
     body_aero: Any
@@ -295,6 +299,9 @@ class WireframeCase:
     #: PSM convention, ``n_aero_panels_per_struc_section`` panels per rib bay.
     #: Used by the strut-lever load transfer.
     panel_bays: Any = None
+    #: The wireframe as read: an awesIO ``Structure`` (bridle lines for VSM,
+    #: snapshots, the case view).
+    structure: Any = None
 
 
 @dataclass
@@ -397,10 +404,12 @@ def build_case(
 ) -> WireframeCase:
     """Load the kite's files and build the VSM body and the tether, once.
 
-    ``struc_geometry_path`` is a PSM-format wireframe (e.g. a deformed
-    snapshot). Without it the wireframe is reduced from the kite's full FEM
-    geometry (:func:`build_case_reduced_fem`, which takes ``config_overrides``
-    key by key and ``system.yaml`` as the default system file).
+    ``struc_geometry_path`` is a wireframe structure file: awesIO (the
+    reduction :func:`build_case_reduced_fem` writes, or a deformed snapshot),
+    or a retired PSM-format file, converted on the fly by ``load_structure``.
+    Without it the wireframe is reduced from the kite's full structure
+    (:func:`build_case_reduced_fem`, which takes ``config_overrides`` key by
+    key and ``system.yaml`` as the default system file).
 
     ``config`` defaults to the kite's ``as_config.yaml``; ``config_overrides``
     is merged over it at the TOP level only (a nested block replaces the
@@ -430,7 +439,7 @@ def build_case(
     # ``system_config_path`` lets a caller drive the deformation with a variant
     # of the kite's system.yaml -- e.g. system_flown_2019.yaml, whose KCU mass is the
     # as-flown 22.75 kg rather than the 8.4 kg optimisation value. The KCU mass
-    # is read from here (see fem.read_struc_geometry_yaml._resolve_kcu_mass) and
+    # is read from here (see structural_geometry_io._resolve_kcu_mass) and
     # again by build_system_model, so overriding the path is the only way
     # to keep the structural cloud and the coupled QSM trim on the same mass.
     system_config_path = (
@@ -446,7 +455,13 @@ def build_case(
         config = load_yaml(config_path)
     if config_overrides:
         config = {**config, **config_overrides}
-    struc_geometry = load_yaml(struc_geometry_path)
+    structure = load_structure(struc_geometry_path)
+    if not structure.is_wireframe:
+        raise ValueError(
+            f"{struc_geometry_path} is a full structure (it has tubes); the wireframe "
+            "driver reduces one with build_case_reduced_fem"
+        )
+    struc_geometry = structure.wireframe_dict()
     aero_geometry = load_yaml(aero_geometry_path)
 
     n_wing_struc_nodes = len(struc_geometry["wing_particles"]["data"])
@@ -455,9 +470,7 @@ def build_case(
         n_panels_aero = (n_struc_ribs - 1) * config["aerodynamic"][
             "n_aero_panels_per_struc_section"
         ]
-    bridle_path = (
-        struc_geometry_path if config.get("is_with_aero_bridle", False) else None
-    )
+    bridle_path = structure if config.get("is_with_aero_bridle", False) else None
     body_aero, vsm_solver, vel_app, initial_polar_data = aerodynamic_vsm.initialize(
         aero_geometry_path,
         config,
@@ -477,6 +490,7 @@ def build_case(
         system_config_path=system_config_path,
         struc_geometry_path=struc_geometry_path,
         struc_geometry=struc_geometry,
+        structure=structure,
         aero_geometry=aero_geometry,
         body_aero=body_aero,
         vsm_solver=vsm_solver,
@@ -721,7 +735,7 @@ def solve_step(
         # Keep the VSM bridle-line drag tracking the deforming/actuated bridle
         # (the initial static bridle mis-trims roll on steered shapes).
         bridle_line_specs=aerodynamic_vsm.parse_bridle_line_specs(
-            case.struc_geometry, config
+            case.structure, config
         ),
         ### AERO --> STRUC
         aero2struc_mapping=prepared.aero2struc_mapping,
@@ -756,7 +770,7 @@ def solve_deformation(
     initialise the VSM body and the PSS structure, run the fixed-point
     aero-structural loop (which converges the VSM quasi-steady trim against the
     deforming structure), then write ``sim_output.h5`` and -- when the config
-    sets ``is_save_geometry_snapshots`` -- the deformed ``struc_geometry.yaml``
+    sets ``is_save_geometry_snapshots`` -- the deformed ``structure.yml``
     / ``aero_geometry.yaml`` / ``system.yaml`` into the results directory.
     It is :func:`build_case`, :func:`prepare_structure` and one
     :func:`solve_step`; a continuation calls :func:`solve_step` again on the
@@ -767,9 +781,10 @@ def solve_deformation(
     ``angle_course_deg``, ``speed_radial``, ``distance_radial``,
     ``wind_speed_wind_ref``) and ``is_save_geometry_snapshots``.
 
-    ``struc_geometry_path`` is a PSM-format wireframe (e.g. the reduction
-    :func:`solve_deformation_reduced_fem` writes); without it this IS
-    :func:`solve_deformation_reduced_fem` on the kite's full FEM geometry.
+    ``struc_geometry_path`` is a wireframe structure file (e.g. the reduction
+    :func:`solve_deformation_reduced_fem` writes, or a deformed snapshot);
+    without it this IS :func:`solve_deformation_reduced_fem` on the kite's
+    full structure.
     ``structural_to_aero`` (a ``SkinStructuralToAeroMapper``) and
     ``n_panels_aero`` fly an aerodynamic mesh other than the ribs' own.
 
@@ -837,7 +852,7 @@ def solve_deformation(
     save_geometry_snapshot(
         config,
         build_deformed_struc_geometry(
-            case.struc_geometry,
+            case.structure,
             final_nodes,
             # the live tapes, not the input file's: the actuation ran after it
             bridle_rest_lengths=np.asarray(
@@ -859,7 +874,7 @@ def solve_deformation(
             kite_name=kite_name,
             config=config,
             system_config_path=case.system_config_path,
-            struc_geometry=case.struc_geometry,
+            struc_geometry=case.structure,
             nodes=final_nodes,
             masses=prepared.m_arr,
             connectivity=reader["kite_connectivity"],
@@ -885,6 +900,7 @@ def solve_deformation(
         "final_nodes": final_nodes,
         "m_arr": prepared.m_arr,
         "struc_geometry": case.struc_geometry,
+        "structure": case.structure,
         "aero_geometry": case.aero_geometry,
         "kite_connectivity_arr": reader["kite_connectivity"],
         "l0_arr": reader["l0"],
@@ -916,17 +932,19 @@ def build_case_reduced_fem(
     config: dict | None = None,
     tether_diameter: float | None = None,
 ) -> WireframeCase:
-    """The wireframe case REDUCED from the full FEM geometry, one input file.
+    """The wireframe case REDUCED from the full structure, one input file.
 
     The same input file as the Billow full model
-    (``billow.driver.solve_deformation``), so the two differ only in the
-    structural model. The full geometry is read, its bridle relaxed onto the
-    held wing exactly as Billow relaxes it
-    (``structural_billow.relax_bridle_nodes``), and reduced to a PSM-format
-    wireframe (``reduce_fem.reduce_fem_geometry``: one rib per strut, two wing
-    nodes per rib, the per-strut line fans collapsed to one equivalent line,
-    tube and canopy stiffnesses from Billow's materials). The reduction is
-    written to ``<work_dir>/struc_geometry_wireframe.yaml``.
+    (``billow.driver.solve_deformation``: the kite's awesIO ``structure.yml``,
+    ``fem_geometry_filename``), so the two differ only in the structural
+    model. The full structure is read, its bridle relaxed onto the held wing
+    exactly as Billow relaxes it (``structural_billow.relax_bridle_nodes``),
+    and reduced to a wireframe (``reduce_fem.reduce_fem_geometry``: one rib
+    per strut, two wing nodes per rib, the per-strut line fans collapsed to
+    one equivalent line, tube and canopy stiffnesses from Billow's
+    materials). The reduction is written as an awesIO wireframe document to
+    ``<work_dir>/structure_wireframe.yml``
+    (``case.WIREFRAME_STRUC_GEOMETRY_FILENAME``).
 
     The aerodynamic mesh is the FULL geometry's -- its true leading and
     trailing edges, every section, ``n_aero_panels_per_struc_section`` panels
@@ -954,8 +972,12 @@ def build_case_reduced_fem(
     from awetrim.aerostructural.billow.driver import merge_config
     from awetrim.aerostructural.billow.structural_billow import relax_bridle_nodes
     from awetrim.aerostructural.billowing import billow_wing, refine_billowed_wing
-    from awetrim.aerostructural.coupled import read_struc_geometry_yaml
+    from awetrim.aerostructural.coupled.awesio_structure import (
+        wireframe_to_awesio,
+        write_awesio,
+    )
     from awetrim.aerostructural.mapping import SkinStructuralToAeroMapper
+    from awetrim.utils.system_config import get_kcu_mass
     from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
 
     project_dir = Path(project_dir) if project_dir is not None else REPO_ROOT
@@ -970,14 +992,13 @@ def build_case_reduced_fem(
     )
 
     fem_path = project_dir / "data" / kite_name / fem_geometry_filename
-    fem = load_yaml(fem_path)
-    reader = read_struc_geometry_yaml.main(
-        load_yaml(fem_path), config=config, system_config=system_config
-    )
+    structure = load_structure(fem_path)
+    # The KCU mass is not in the structure: system.yaml is its single source.
+    reader = structure.resolved(kcu_mass=get_kcu_mass(system_config) or 0.0)
     nodes, masses = reader[0], reader[1]
     relaxed = relax_bridle_nodes(
         config,
-        fem,
+        structure,
         nodes,
         reader[10],  # kite_connectivity_arr
         reader[13],  # l0_arr
@@ -987,7 +1008,7 @@ def build_case_reduced_fem(
         reader[7],  # canopy_sections
         reader[8],  # strut_sections
     )
-    reduced = reduce_fem_geometry(fem, nodes=relaxed, masses=masses, config=config)
+    reduced = reduce_fem_geometry(structure, nodes=relaxed, masses=masses, config=config)
 
     per_section = int(config["aerodynamic"]["n_aero_panels_per_struc_section"])
     n_ribs = len(reduced["wing_particles"]["data"]) // 2
@@ -995,10 +1016,8 @@ def build_case_reduced_fem(
     fem_le, fem_te = np.asarray(reader[2], dtype=int), np.asarray(reader[3], dtype=int)
     # the FEM section of every reduced rib (both run +y to -y)
     rib_le_node = [
-        int(row[-1][0])
-        for row in sorted(
-            fem["strut_tubes"]["data"], key=lambda row: -relaxed[int(row[-1][0])][1]
-        )
+        int(strut["nodes"][0])
+        for strut in sorted(structure.struts, key=lambda strut: -relaxed[strut["nodes"][0]][1])
     ]
     rib_sections = [int(np.flatnonzero(fem_le == node)[0]) for node in rib_le_node]
     if rib_sections != sorted(rib_sections) or len(rib_sections) != n_ribs:
@@ -1073,12 +1092,13 @@ def build_case_reduced_fem(
         / build_actuation_case_folder(config)
     )
     work_dir.mkdir(parents=True, exist_ok=True)
-    reduced_path = work_dir / "struc_geometry_wireframe.yaml"
+    reduced_path = work_dir / WIREFRAME_STRUC_GEOMETRY_FILENAME
     # written whole and then moved into place: parallel sweep processes build
     # the same case and must never read a half-written file
     partial = reduced_path.with_suffix(f".{os.getpid()}.tmp")
-    with partial.open("w", encoding="utf-8") as handle:
-        _yaml.safe_dump(reduced, handle, sort_keys=False)
+    write_awesio(
+        wireframe_to_awesio(reduced, name=f"{kite_name} wireframe"), partial
+    )
     os.replace(partial, reduced_path)
     logging.info(
         "wireframe reduced from %s: %d wing + %d bridle nodes, wing %.3f kg, "
@@ -1116,7 +1136,7 @@ def solve_deformation_reduced_fem(
 ) -> dict:
     """One wireframe case on the wireframe REDUCED from the full FEM geometry
     (:func:`build_case_reduced_fem`, the reduction written to
-    ``<results_dir>/struc_geometry_wireframe.yaml``), solved with
+    ``<results_dir>/structure_wireframe.yml``), solved with
     :func:`solve_deformation`.
 
     ``config_overrides`` is merged key by key (nested dicts too) over the

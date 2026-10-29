@@ -59,16 +59,22 @@ def wing_triangles(le_indices: Sequence[int], te_indices: Sequence[int]) -> np.n
     return np.asarray(triangles, dtype=int).reshape(-1, 3)
 
 
-def bridle_line_names(struc_geometry: Mapping[str, Any]) -> dict[frozenset, str]:
-    """Node pair -> line name, from the geometry's ``bridle_connections``.
+def bridle_line_names(struc_geometry: Any) -> dict[frozenset, str]:
+    """Node pair -> line name, from the structure's bridle segments.
 
-    A pulley row ``[name, ci, cj, ck]`` names both of its arms.
+    ``struc_geometry`` is a :class:`Structure` or anything ``load_structure``
+    accepts; node indices are its ``points`` row order, the readers' node
+    order. A pulley's two arms are segments of their own, so both are named.
     """
+    if not struc_geometry:
+        return {}
+    from awetrim.aerostructural.coupled.awesio_structure import load_structure
+
+    structure = load_structure(struc_geometry)
     names: dict[frozenset, str] = {}
-    for row in struc_geometry.get("bridle_connections", {}).get("data", []):
-        name, nodes = str(row[0]), [int(n) for n in row[1:]]
-        for first, second in zip(nodes[:-1], nodes[1:]):
-            names.setdefault(frozenset((first, second)), name)
+    for segment in structure.bridle_segments:
+        pair = frozenset(structure.index[p] for p in segment["points"])
+        names.setdefault(pair, str(segment["line"]))
     return names
 
 
@@ -76,7 +82,7 @@ def classify_lines(
     connectivity: Sequence[Sequence[int]],
     *,
     wing_nodes: Sequence[int],
-    struc_geometry: Mapping[str, Any],
+    struc_geometry: Any,
     power_tape_index: int | None = None,
     steering_tape_indices: Sequence[int] | None = None,
     pulley_line_indices: Sequence[int] | None = None,
@@ -183,7 +189,7 @@ def build_case_view(
     kite_name: str,
     config: Mapping[str, Any],
     system_config_path: Path | str,
-    struc_geometry: Mapping[str, Any],
+    struc_geometry: Any,
     nodes: np.ndarray,
     masses: np.ndarray,
     connectivity: Sequence[Sequence[int]],

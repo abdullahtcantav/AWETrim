@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import yaml
 
 from awetrim.aerostructural.billowing import (
     arc_half_angle,
@@ -8,20 +7,19 @@ from awetrim.aerostructural.billowing import (
     panel_bays,
     refine_billowed_wing,
 )
+from awetrim.aerostructural.coupled.awesio_structure import load_structure
 from awetrim.utils.config_paths import REPO_ROOT
 
-FEM = REPO_ROOT / "data" / "LEI-V3-KITE" / "struc_geometry_FEM_full.yaml"
+STRUCTURE = REPO_ROOT / "data" / "LEI-V3-KITE" / "structure.yml"
 
 
 @pytest.fixture(scope="module")
 def lei_v3_wing():
-    """Sections (LE, TE) and strut sections of the LEI-V3 full FEM file."""
-    geo = yaml.safe_load(FEM.read_text(encoding="utf-8"))
-    nodes = {int(r[0]): np.asarray(r[1:4], float) for r in geo["wing_particles"]["data"]}
-    n = len(nodes) // 2
-    le = np.array([nodes[2 * k + 1] for k in range(n)])
-    te = np.array([nodes[2 * k + 2] for k in range(n)])
-    struts = sorted((int(r[1]) - 1) // 2 for r in geo["strut_tubes"]["data"])
+    """Sections (LE, TE) and strut sections of the LEI-V3 full structure."""
+    structure = load_structure(STRUCTURE)
+    le = structure.positions[structure.leading_edge]
+    te = structure.positions[structure.trailing_edge]
+    struts = sorted(structure.leading_edge.index(s["nodes"][0]) for s in structure.struts)
     return le, te, struts
 
 
