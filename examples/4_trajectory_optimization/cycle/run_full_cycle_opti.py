@@ -66,8 +66,9 @@ from awetrim.timeseries.phase import Phase
 #   CYCLE_CONFIG_PATH  the seed written by fit_periodic_cycle_config.py
 #   RESULTS_DIR        optimized YAML/CSV/figures
 #   DEPOWER_BAND       (powered, depowered) ROM depower inputs the seed's
-#                      profile must stay inside, in the ROM's u_p unit
-#                      (rom_config.yaml controls.input_depower)
+#                      profile must stay inside, in the ROM's u_p unit (the
+#                      reference flight's matched tapes, else the ROM's
+#                      controls.input_depower; cycle_kites.resolve_kite)
 #   WIND_CONFIG        the constant wind profile the cycle is optimized in --
 #                      ``model_type`` selects the law in
 #                      awetrim.environment.profile_laws (or "tabulated" with

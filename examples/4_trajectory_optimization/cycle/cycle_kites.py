@@ -187,6 +187,7 @@ def resolve_kite(kite: str | Path | None = None) -> dict:
         flight["h5"] = (DATA_DIR.parent / "results" / folder.name / "ekf"
                         / f'{flight["kite_model"]}_{date}.h5')
 
+    depower_match = flight_depower_match(folder, flight.get("year"))
     return {
         "name": folder.name,
         "dir": folder,
@@ -194,10 +195,15 @@ def resolve_kite(kite: str | Path | None = None) -> dict:
         "rom_config": rom_path,
         "cycle_config_dir": folder / "cycle_configs",
         "results_dir": Path("results") / folder.name / "optimization" / "full_cycle",
-        "depower_band": rom_depower_band(rom),
-        # the ROM tapes of the reference flight (identification.yaml
-        # flight_match), the u_p the flight's depower is read in
-        "depower_match": flight_depower_match(folder, flight.get("year")),
+        # The seed's powered (reel-out) / depowered (reel-in) levels: the
+        # reference flight's, as the ROM reads them (identification.yaml
+        # flight_match), else the ROM's identified band -- whose ends are the
+        # stall and lull margins, not operating points. The optimizer's box
+        # is the ROM's validity band either way (system.factory).
+        "depower_band": depower_match or rom_depower_band(rom),
+        # the ROM tapes of the reference flight, the u_p the flight's depower
+        # is read in
+        "depower_match": depower_match,
         "wind": dict(profile["wind"]),
         "winch_law": dict(profile["winch_law"]),
         "r0": r0,
