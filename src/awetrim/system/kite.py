@@ -502,9 +502,11 @@ class Kite(Wing):
         # + k1 u_p + k2 u_p^2 ...: polynomial coefficients [k1, k2, ...] in
         # u_p's own unit. The wing rolls less per unit steering when fully
         # powered (LEI-V3 sweep: -19 deg per u_s at 1.40 m, -34 at 2.10 m).
-        # Absent/empty = the constant gain of the paper's Eq. 43.
+        # Absent/empty = the constant gain of the paper's Eq. 43. A CasADi
+        # coefficient is kept symbolic (a fit that scales the whole k(u_p)).
         self.gain_roll_steering_depower = [
-            float(c) for c in (self.aero_params.get("gain_roll_steering_depower") or [])
+            c if isinstance(c, (ca.MX, ca.SX)) else float(c)
+            for c in (self.aero_params.get("gain_roll_steering_depower") or [])
         ]
         # Sideslip -> aerodynamic roll, phi_a,w += gain_roll_sideslip * beta_a
         # [rad per rad], beta_a = angle_sideslip_for(model): the restoring roll

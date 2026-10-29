@@ -60,8 +60,9 @@ Flight samples, from the 2019-10-08 EKF reconstruction (results/LEI-V3-KITE/ekf)
                 is in the ROM's C_D, not in F_b). A force angle, not a vane.
     u_p, u_s    awetrim.identification.controls (power-tape metres;
                 standardised steering + FLIGHT_STEERING_ZERO_OFFSET_2019).
-    selection   reel-out (v_r > 0.5, u_p < 1.9, elevation < 0.75 rad) and
-                reel-in (v_r < -0.5, u_p >= 1.9), alpha_w inside the ROM's
+    selection   reel-out (v_r > 0.5, u_p below the middle of the matched
+                tapes, elevation < 0.75 rad) and reel-in (v_r < -0.5, u_p at
+                or above it), alpha_w inside the ROM's
                 validity range and below its stall.
 
 ``--alpha rom`` / ``--alpha bridle`` skip step 1 (theta_b stays the AS one;
@@ -242,8 +243,9 @@ def build_dataset(rom: dict, flight_file: Path = EKF_FILE) -> pd.DataFrame:
         "CD_kcu_rom": cd_kcu_rom, "CD_kcu_ekf": ekf.kcu_drag_coefficient,
     })
     data["u_s_lagged"] = data.u_s.shift(int(round(STEERING_LAG_S / np.median(np.diff(ekf.time)))))
-    reel_out = (data.speed_radial > 0.5) & (data.u_p < 1.9) & (data.elevation < 0.75)
-    reel_in = (data.speed_radial < -0.5) & (data.u_p >= 1.9)
+    split = 0.5 * sum(flight_depower_match(LEI_V3_DATA_DIR, 2019))
+    reel_out = (data.speed_radial > 0.5) & (data.u_p < split) & (data.elevation < 0.75)
+    reel_in = (data.speed_radial < -0.5) & (data.u_p >= split)
     data["phase"] = np.where(reel_out, "reel-out", np.where(reel_in, "reel-in", ""))
     return data
 
