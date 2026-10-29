@@ -51,6 +51,7 @@ from awetrim.aerostructural.case import (
     build_actuation_case_folder,
     build_system_model,
     build_tether,
+    resolve_config_paths,
     resolve_initial_geometry_rotation_kwargs,
     resolve_kite_paths,
 )
@@ -220,9 +221,7 @@ def build_case(
     config = merge_config(
         merge_config(load_yaml(config_path), BILLOW_CONFIG_DEFAULTS), config_overrides
     )
-    cp_rel = config.get("aero2struc", {}).get("cp_distribution_path")
-    if cp_rel and not Path(cp_rel).is_absolute():
-        config["aero2struc"]["cp_distribution_path"] = str(project_dir / cp_rel)
+    resolve_config_paths(config, project_dir)
 
     struc_geometry = load_yaml(struc_geometry_path)
     aero_geometry = load_yaml(aero_geometry_path)

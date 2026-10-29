@@ -174,6 +174,11 @@ src/awetrim/aerostructural/
                                    pitching moment is conserved; load_transfer
                                    decides how the load reaches the nodes
                                    (traction integral for billow, see below).
+                                   Billow full only. A stated
+                                   cp_distribution_path that does not exist
+                                   raises (it used to fall back to uniform
+                                   weights); relative paths resolve against the
+                                   project root (case.resolve_config_paths).
     read_struc_geometry_yaml.py    Parse struc_geometry YAML (strut tubes, LE tubes)
 
   # -- Wireframe fidelity ----------------------------------------------------

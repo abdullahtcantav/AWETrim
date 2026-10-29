@@ -96,6 +96,28 @@ def resolve_kite_paths(
     return config_path, aero_geometry_path, struc_geometry_path
 
 
+def resolve_config_paths(config: dict, project_dir: Path | str) -> dict:
+    """``config`` with its relative file paths made absolute against the
+    project root (``aero2struc.cp_distribution_path``), in place and returned:
+    a path relative to the working directory silently changed the physics
+    whenever a script ran from elsewhere."""
+    aero2struc = config.get("aero2struc") or {}
+    cp = aero2struc.get("cp_distribution_path")
+    if cp and not Path(cp).is_absolute():
+        aero2struc["cp_distribution_path"] = str(Path(project_dir) / cp)
+    return config
+
+
+def find_struc_geometry(folder: Path | str) -> Path | None:
+    """The structural geometry in ``folder``: a kite data folder's FEM file,
+    else a results folder's deformed snapshot, else None."""
+    folder = Path(folder)
+    for name in (DEFAULT_STRUC_GEOMETRY_FILENAME, SNAPSHOT_STRUC_GEOMETRY_FILENAME):
+        if (folder / name).exists():
+            return folder / name
+    return None
+
+
 def format_length_tag(value_m: float) -> str:
     """Format a signed length [m] as a filesystem-friendly tag, e.g. p0150mm."""
     sign = "p" if value_m >= 0 else "m"

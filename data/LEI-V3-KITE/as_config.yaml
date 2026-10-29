@@ -186,17 +186,20 @@ structural_pss:
   # modulus_stall_iters: !!int 25
   # modulus_max_halvings: !!int 2
 
-## aero2struc
+## aero2struc: the panel-to-node load transfer of Billow's FULL fidelity
+## (coupled/aero2struc.py). The wireframe maps panel corners onto its ribs
+## (aerodynamic.load_transfer) and reads none of this.
 aero2struc:
   coupling_method: !!str 'NN'
   eps: !!float 1e-6
   power_for_inverse_weighting: !!float 2.0
+  # relative to the project root (aerostructural.case.resolve_config_paths)
   cp_distribution_path: data/LEI-V3-KITE/cp_distributions/cp_AOA_8.dat
   # Where the chordwise weights put a panel's resultant IS its local pitching
   # moment, and the wing's trim is a moment balance.
   #   cp_file        one measured Delta C_p shape for every panel, so the
   #                  resultant sits at 0.291 c regardless of the panel's own
-  #                  C_m. Reproduces every stored FEM result.
+  #                  C_m. The default.
   #   moment_matched keeps that shape as a prior and tilts it onto the centre
   #                  of pressure VSM computes from the panel's own F and M, so
   #                  force AND moment are both conserved.
