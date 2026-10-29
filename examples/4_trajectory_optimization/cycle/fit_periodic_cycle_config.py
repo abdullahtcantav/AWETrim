@@ -1231,7 +1231,6 @@ def _simulate_cycle(config, run_plots=False):
     import run_full_cycle_opti as rfco
 
     from awetrim.system.factory import create_system_model_from_yaml
-    from awetrim.timeseries.phase import Phase
 
     # Evaluate the seed at the SAME wind the optimizer will use: a shape that
     # trims at one wind speed can be infeasible at another (higher wind
@@ -1252,20 +1251,17 @@ def _simulate_cycle(config, run_plots=False):
         + rfco.describe_wind(WIND_CONFIG)
     )
 
-    start_state = {
-        "t": 0,
-        "s": 0,
-        "s_dot": 2,
-        "input_steering": 0,
-        "tension_tether_ground": reelout["radial_parameters"]["max_tether_force"],
-        "speed_radial": 1.0,
-        "distance_radial": reelout["path_parameters"]["r0"],
-        "input_depower": float(sim["input_depower_profile"][0]),
-    }
-    phase_obj = Phase(
-        system_model=system_model, pattern_config=reelout, start_state=start_state
+    # The optimizer's own march: the same start state, and a seed the kite
+    # cannot turn through at its own roll gain is marched at the smallest
+    # assisted one the optimizer would continue from (march_with_roll_assist).
+    _, phase, assist, failure = rfco.march_with_roll_assist(
+        system_model, reelout, run_plots=run_plots
     )
-    phase, _ = phase_obj.run_simulation(run_plots=run_plots, phase_sim=True)
+    if assist is not None and assist != 1.0:
+        print(f"[info] the seed trims only at {assist:g} x the kite's roll gain "
+              f"(at 1: {failure}); run_full_cycle_opti continues it back to 1")
+    if phase is None:
+        raise RuntimeError(f"seed march failed at every roll-gain scale: {failure}")
     try:
         print("Initial-guess metrics:", phase.energy_metrics())
     except Exception as exc:

@@ -140,6 +140,104 @@ configure_kite(DEFAULT_KITE)
 # 6-10 m/s at 100 m and 15% at 12 m/s; with this split every case converged
 # without a topology change, at the best power of all variants (1.45 / 8.26 /
 # 11.64 kW at 6 / 10 / 12 m/s). The driver warns when a box is active.
+# Roll-gain continuation. A seed is a fixed path; a kite that turns less per
+# unit steering than its geometry assumes (the LEI-V3 bare aerostructural ROM:
+# 1.6x the flown steering for the flown turns) cannot be forward-simulated
+# through its tight parts, although a cycle exists that it flies. The seed is
+# then marched with the kite's roll gain k(u_p) scaled up -- the smallest of
+# ROLL_ASSIST_SCALES that trims it -- the first (feasibility) stage is solved
+# there, and continuation stages step the scale back to 1, each halving the
+# excess (to 1 once below ROLL_ASSIST_MIN_STEP) and warm-started from the
+# previous optimum; a failed step is retried from its midpoint, at most
+# ROLL_ASSIST_MAX_HALVINGS times. The power and polish stages always run at
+# scale 1: the result is the kite's own optimum. A seed that trims at scale 1
+# is optimized exactly as before.
+ROLL_ASSIST_SCALES = (1.0, 1.25, 1.5, 1.75, 2.0)
+ROLL_ASSIST_MIN_STEP = 0.05
+ROLL_ASSIST_MAX_HALVINGS = 4
+
+
+def _fully_trimmed(phase, pattern_config) -> bool:
+    n = int(pattern_config["sim_parameters"]["n_points"])
+    return phase is not None and np.asarray(phase.return_variable("s")).size >= n
+
+
+def march_with_roll_assist(system_model, pattern_config, *, run_plots=False,
+                           seed_warm_start=False, scales=None):
+    """Forward-simulate ``pattern_config`` at the smallest roll-gain scale that
+    trims it. Returns ``(cycle, phase, scale, failure)``: the Phase object
+    (its kite left at that scale), the simulated phase, the scale, and the
+    error of the scale-1 attempt (None if it succeeded). When no scale trims
+    it, ``cycle`` and ``phase`` are the attempt that got furthest (``None``
+    if all raised; the kite left at its scale, which the returned
+    ``reached_scale`` attribute of ``phase`` records) and ``scale`` is None:
+    a seed tuner then works on the region the assisted march actually
+    reaches. (Not monotonic in the scale: too much roll gain can lose the
+    first node's root, so every scale is tried.) A strict config
+    (``require_full_trajectory``) raises on a failed node; a non-strict one
+    returns a truncated phase."""
+    best, first_failure = (None, None, None, -1), None
+    for scale in scales or ROLL_ASSIST_SCALES:
+        system_model.kite.gain_roll_scale = float(scale)
+        cycle = Phase(
+            system_model=system_model,
+            pattern_config=pattern_config,
+            start_state=build_start_state(pattern_config),
+        )
+        try:
+            phase, _ = cycle.run_simulation(
+                run_plots=run_plots, phase_sim=True, seed_warm_start=seed_warm_start
+            )
+        except RuntimeError as exc:
+            print(f"  roll gain x {scale:g}: march failed ({exc})")
+            first_failure = first_failure or exc
+            continue
+        if _fully_trimmed(phase, pattern_config):
+            if scale != 1.0:
+                print(f"Roll-gain assist: the seed trims at {scale:g} x k(u_p) "
+                      f"(not at 1: {first_failure}); the optimizer continues it back to 1")
+            return cycle, phase, float(scale), first_failure
+        reached = int(np.asarray(phase.return_variable("s")).size)
+        print(f"  roll gain x {scale:g}: trim truncated at node {reached}")
+        first_failure = first_failure or RuntimeError(f"trim truncated at node {reached}")
+        if reached > best[3]:
+            best = (cycle, phase, float(scale), reached)
+    cycle, phase, scale, _ = best
+    system_model.kite.gain_roll_scale = scale or 1.0
+    if phase is not None:
+        phase.reached_scale = scale
+    return cycle, phase, None, first_failure
+
+
+def _roll_assist_stages(stages, assist):
+    """The stage list for a seed marched at roll-gain scale ``assist``."""
+    if not assist or assist == 1.0:
+        return [dict(stage, roll_scale=1.0) for stage in stages]
+    plan = [dict(stages[0], roll_scale=assist)]
+    scale = assist
+    while scale > 1.0:
+        scale = 1.0 + (scale - 1.0) / 2.0
+        if scale - 1.0 < ROLL_ASSIST_MIN_STEP:
+            scale = 1.0
+        plan.append(dict(stages[0], roll_scale=scale, continuation=True, halvings=0,
+                         label=f"roll-gain continuation | k(u_p) x {scale:g}"))
+    return plan + [dict(stage, roll_scale=1.0) for stage in stages[1:]]
+
+
+def _retry_continuation(stages, i) -> bool:
+    """Insert the midpoint before a failed continuation step ``i``."""
+    stage = stages[i]
+    if not stage.get("continuation") or stage["halvings"] >= ROLL_ASSIST_MAX_HALVINGS:
+        return False
+    previous = stages[i - 1]["roll_scale"]
+    mid = 0.5 * (previous + stage["roll_scale"])
+    stage["halvings"] += 1
+    stages.insert(i, dict(stage, roll_scale=mid,
+                          label=f"roll-gain continuation | k(u_p) x {mid:g} (step halved)"))
+    print(f"    continuation step failed; retrying from the midpoint x {mid:g}")
+    return True
+
+
 STAGES = [
     # Feasibility first: the seed's forward simulation marches the seed's
     # force law and is generally OPEN (the free_speed NLP drops that law), so
@@ -225,6 +323,13 @@ REELIN_ELEVATION_FRACTION = 0.75
 # source of truth -- validate_full_cycle_config() refuses configs that lack
 # them or that mix path / depower / winch data from different sources.
 MAX_ITER = 1000
+
+# Control-smoothness term of the power stages as a fraction of the power
+# objective at each stage's start (sim_parameters.reg_fraction). On the LEI-V3
+# at 6 m/s a fixed weight of 10 (about this fraction) cost 0.2 % (bare ROM) to
+# 1.2 % (flight-corrected) of the power and halved the steering's total
+# variation; a weight of 50 cost 3 %. An explicit reg_weight in the seed wins.
+REG_FRACTION = 0.1
 
 # Downsample the loaded config to this many nodes before solving (None = keep the
 # config's n_points). The depower profile + per-node trim + closure all scale with
@@ -413,7 +518,12 @@ def validate_full_cycle_config(reelout_config):
 
 
 def build_start_state(reelout_config):
-    """Initial state for the cycle, started at the spline radius r0 (reel-out)."""
+    """Initial state of the cycle at the spline radius r0, and the first
+    node's solver guess (a reel-out state at the maximum tension). The one
+    start state of the seed march (fit_periodic_cycle_config) and the
+    optimizer's baseline. (A reel-in guess at a depowered first node was
+    tried on 2026-10-29: it converged to another root and broke the LEI-V3
+    seed, so the march keeps this one.)"""
     sim = reelout_config.get("sim_parameters", {})
     profile = sim.get("input_depower_profile")
     depower0 = (
@@ -429,7 +539,7 @@ def build_start_state(reelout_config):
         "tension_tether_ground": reelout_config["radial_parameters"][
             "max_tether_force"
         ],
-        "speed_radial": 1.0,  # positive: cycle begins reeling out
+        "speed_radial": 1.0,
         "distance_radial": reelout_config["path_parameters"]["r0"],
         "input_depower": depower0,
     }
@@ -574,13 +684,21 @@ def main(
     step_scale: float = None,
     wind_speed: float = None,
     wind_height: float = None,
+    warm_start_csv=None,
 ) -> int:
     """``config_path`` overrides the kite's seed YAML (a variant such as the
     same seed with ``winch_mode: force_law``); ``run_tag`` is appended to the
     output filenames so variants do not overwrite each other. ``wind_speed``
     (m/s at ``wind_height``, default the profile's reference height) replaces
     the profile wind's amplitude, keeping its law (``cycle_kites.override_wind``);
-    the seed must have been generated at the same wind."""
+    the seed must have been generated at the same wind.
+
+    ``warm_start_csv`` is a previous run's optimized trajectory
+    (``full_cycle_optimized_<tag>.csv``, on the same node grid as the config):
+    stage 1 is seeded from it instead of from a forward simulation, which a
+    model that cannot march the start shape (another ROM, say) would fail.
+    The baseline is then simulated only for the comparison, and skipped if it
+    cannot be trimmed."""
     global WIND_CONFIG
     configure_kite(kite or KITE_DIR)
     WIND_CONFIG = override_wind(WIND_CONFIG, wind_speed, wind_height)
@@ -621,30 +739,56 @@ def main(
     system_model = create_system_model_from_yaml(yaml_path=KITE_CONFIG_PATH)
     system_model.wind = build_wind_model(**WIND_CONFIG)
 
+    assist = 1.0
     cycle = Phase(
         system_model=system_model,
         pattern_config=reelout_config,
         start_state=build_start_state(reelout_config),
     )
+    if warm_start_csv:
+        import pandas as pd
+
+        trajectory = pd.read_csv(warm_start_csv)
+        cycle._warm_start_trajectory = {
+            name: trajectory[name].to_numpy(dtype=float) for name in trajectory.columns
+        }
+        cycle._warm_start_source = "optimum"
+        print(f"Warm start: stage 1 seeded from {warm_start_csv} ({len(trajectory)} nodes)")
 
     print("Simulating the experimental-fit cycle (baseline)...")
-    try:
+    if warm_start_csv:
+        try:
+            # a stored warm start (--warm-start) seeds stage 1, not this march
+            baseline_phase, _ = cycle.run_simulation(
+                run_plots=run_plots, phase_sim=True, seed_warm_start=False
+            )
+        except RuntimeError as exc:
+            print(f"Baseline forward simulation failed: {exc}")
+            print("Continuing from the warm-start trajectory, without a baseline.")
+            baseline_phase = None
+    else:
         # seed_warm_start: this march doubles as the NLP's warm start, so
         # stage 1 does not re-run the identical (~0.35 s/node) simulation;
         # later passes seed from the previous optimum and skip it as well.
-        baseline_phase, _ = cycle.run_simulation(
-            run_plots=run_plots, phase_sim=True, seed_warm_start=True
+        # A seed the kite cannot turn through is marched at an assisted roll
+        # gain (march_with_roll_assist) and continued back to 1 below.
+        cycle, baseline_phase, assist, failure = march_with_roll_assist(
+            system_model, reelout_config, run_plots=run_plots, seed_warm_start=True
         )
-    except RuntimeError as exc:
-        # require_full_trajectory: a node of the fitted cycle failed to trim.
-        print(f"Baseline forward simulation failed: {exc}")
-        print(
-            "The fitted initial guess cannot be trimmed over the whole cycle; "
-            "re-tune fit_periodic_cycle_config.py and regenerate the config "
-            "before optimizing."
-        )
-        return 1
-    print(baseline_phase.energy_metrics())
+        if assist is None:
+            # require_full_trajectory: a node of the fitted cycle failed to trim.
+            print(f"Baseline forward simulation failed: {failure}")
+            print(
+                "The fitted initial guess cannot be trimmed over the whole cycle, "
+                f"not even at {max(ROLL_ASSIST_SCALES):g} x the roll gain; re-tune "
+                "fit_periodic_cycle_config.py and regenerate the config before "
+                "optimizing."
+            )
+            return 1
+    if baseline_phase is not None:
+        if assist != 1.0:
+            print(f"(baseline marched at {assist:g} x the roll gain)")
+        print(baseline_phase.energy_metrics())
 
     if optimize:
         seed_wrap = bool(sim.get("periodic_wrap", False))
@@ -657,7 +801,13 @@ def main(
         )
         result = None
         aborted = False
-        for i, stage in enumerate(STAGES):
+        stages = _roll_assist_stages(STAGES, assist)
+        i = -1
+        while i + 1 < len(stages):
+            i += 1
+            stage = stages[i]
+            retry = False
+            cycle.system_model.kite.gain_roll_scale = float(stage["roll_scale"])
             # Soft closure (penalty) until the final hard-close stage. Each stage
             # warm-starts from the previous one: run_simulation_opti writes the
             # optimized shape/winch back into the config and advances start_state.
@@ -676,13 +826,17 @@ def main(
             sim["depower_anchor_weight"] = anchor
             step_bounds = stage.get("step_bounds") or {}
             target = stage.get("target", "power")
+            # The power stages select the smoothest of the near-equal-power
+            # trajectories (the ridge is flat in shape and steering; without
+            # it the reel-in of a kite steering at its band zigzags).
+            sim["reg_fraction"] = REG_FRACTION if target == "power" else 0.0
             repeats = int(stage.get("repeat", 1))
             trust_weight = float(stage.get("trust_region_weight", 0.0))
             warm_start = bool(stage.get("warm_start", False))
             for rep in range(repeats):
                 rep_tag = f" (pass {rep + 1}/{repeats})" if repeats > 1 else ""
                 print(
-                    f"\n=== Stage {i + 1}/{len(STAGES)}: {stage['label']}{rep_tag} ===\n"
+                    f"\n=== Stage {i + 1}/{len(stages)}: {stage['label']}{rep_tag} ===\n"
                     f"    params={stage['params']} + depower profile  "
                     f"(target={target}, trust_region_weight={trust_weight:g})"
                 )
@@ -702,6 +856,9 @@ def main(
                         warm_start=warm_start,
                     )
                 except RuntimeError as exc:
+                    if _retry_continuation(stages, i):
+                        retry = True
+                        break
                     # require_full_trajectory: the warm-start re-simulation of the
                     # previous stage's config failed a node mid-cycle. A padded
                     # seed is worse than stopping, so abort the staging here.
@@ -712,6 +869,9 @@ def main(
                     aborted = True
                     break
                 if stage_result is None:
+                    if _retry_continuation(stages, i):
+                        retry = True
+                        break
                     print(f"Stage {i + 1} failed; stopping (keeping last good config).")
                     aborted = True
                     break
@@ -749,11 +909,23 @@ def main(
                         "skipping remaining passes"
                     )
                     break
+            if retry:
+                i -= 1  # the inserted midpoint step runs next
+                continue
             if aborted:
                 break
             result.save_config_to_yaml(
                 RESULTS_DIR / f"full_cycle_optimized_{tag}_stage{i + 1}.yaml"
             )
+        cycle.system_model.kite.gain_roll_scale = 1.0
+        if assist != 1.0:
+            path = " -> ".join(f"{s['roll_scale']:g}" for s in stages
+                               if s["roll_scale"] != 1.0 or s is stages[-1])
+            print(f"Roll-gain continuation: {path} (the result is at scale 1)"
+                  if not aborted else
+                  f"Roll-gain continuation aborted at scale {stage['roll_scale']:g}")
+            if aborted and stage["roll_scale"] != 1.0:
+                return 1
 
         if result is None:
             return 1
@@ -824,6 +996,15 @@ if __name__ == "__main__":
         "the previous run ended with the backstop step box active",
     )
     parser.add_argument(
+        "--warm-start",
+        dest="warm_start",
+        default=None,
+        help="Optimized trajectory CSV of a previous run on the same node grid "
+        "(full_cycle_optimized_<tag>.csv): seeds stage 1 instead of a forward "
+        "simulation, e.g. to optimize with another ROM from that optimum "
+        "(pair it with --continue-from that run's optimized YAML)",
+    )
+    parser.add_argument(
         "--step-scale",
         type=float,
         default=None,
@@ -855,6 +1036,7 @@ if __name__ == "__main__":
         step_scale=args.step_scale,
         wind_speed=args.wind_speed,
         wind_height=args.wind_height,
+        warm_start_csv=args.warm_start,
     )
     if args.plot:
         import matplotlib.pyplot as plt
