@@ -16,7 +16,6 @@ from awetrim.utils.config_paths import (
 )
 from awetrim.environment.Wind import Wind
 from awetrim.identification.controls import (
-    ROM_POWERED_INPUT_DEPOWER,
     flight_dataframe_depower_to_power_tape_length,
     flight_depower_match,
 )
@@ -411,8 +410,7 @@ def simulate_cycle(
                 f"(resampled to {sim_params['n_points']+1} points)"
             )
         else:
-            match = flight_depower_match(LEI_V3_DATA_DIR, 2019)
-            sim_params["input_depower"] = match[0] if match else ROM_POWERED_INPUT_DEPOWER
+            sim_params["input_depower"] = flight_depower_match(LEI_V3_DATA_DIR, 2019)[0]
 
         # Loosen the per-node accept tolerance so the reel-out trim can advance
         # past marginal (near-singular) nodes instead of truncating mid-cycle.

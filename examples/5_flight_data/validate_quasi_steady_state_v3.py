@@ -18,8 +18,6 @@ from awetrim.environment.Wind import Wind
 from awetrim.environment.profile_laws import friction_velocity, speed_from_friction_velocity
 from awetrim.identification.controls import (
     FLIGHT_STEERING_ZERO_OFFSET_2019,
-    ROM_POWERED_INPUT_DEPOWER,
-    ROM_DEPOWERED_INPUT_DEPOWER,
     flight_dataframe_depower_to_power_tape_length,
     flight_dataframe_steering_to_us,
     flight_depower_match,
@@ -225,8 +223,7 @@ azimuth = np.arctan2(results.kite_position_y, results.kite_position_x)
 
 # ROM controls from the 2019 flight:
 #   u_p = the MODEL power-tape length [m] that reproduces the flight
-#         (identification.yaml flight_match: powered 1.94, depowered 2.40;
-#         flown 1.70 / 2.10)
+#         (identification.yaml flight_match)
 #   u_s = standardised steering (identification.controls, 2019 norm)
 # Do not feed the legacy normalised flight_data["up"] / ["us"] columns into the ROM.
 DEPOWER_MATCH = flight_depower_match(LEI_V3_DATA_DIR, 2019)
@@ -645,11 +642,7 @@ for cfg, label in zip(aero_cfgs, aero_labels):
 # Print comparison results for both models
 for label, solutions_df in all_solutions.items():
     # --- Create phase masks ---
-    powered_depower_threshold = 0.5 * (
-        sum(DEPOWER_MATCH)
-        if DEPOWER_MATCH
-        else ROM_POWERED_INPUT_DEPOWER + ROM_DEPOWERED_INPUT_DEPOWER
-    )
+    powered_depower_threshold = 0.5 * sum(DEPOWER_MATCH)
     mask_pow = (
         (flight_data.input_depower < powered_depower_threshold)
         & (flight_data.kite_elevation < 0.75)

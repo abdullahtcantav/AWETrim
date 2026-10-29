@@ -100,7 +100,7 @@ sweep:
         step: 0.05
       # Across the ROM band (fit: depower_band), through both flight-match
       # tapes (fit: flight_match): 1.95 ~ reel-out, 2.40 = reel-in; 1.70 / 2.10
-      # are the flown tapes. To 0.20 m = |u_s| 0.14, toward the flown 0.175
+      # the previous model's match. To 0.20 m = |u_s| 0.14, toward the flown 0.175
       # (KCU clip); the stall stop ends a chain earlier where the tip stalls.
       steering:
         power_tape_lengths: [1.40, 1.70, 1.95, 2.10, 2.40]

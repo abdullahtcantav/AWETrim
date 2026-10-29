@@ -221,7 +221,7 @@ def build_dataset(rom: dict, flight_file: Path = EKF_FILE) -> pd.DataFrame:
     phi_a_w = roll_about_va(f_wing, va, radial) - roll_about_va(-f_bridle_rom, va, radial)
 
     # in the ROM's u_p: the model tapes that reproduce the 2019 flight
-    # (identification.yaml flight_match), not the flown 1.70 / 2.10
+    # (identification.yaml flight_match)
     flight["input_depower"] = flight_dataframe_depower_to_power_tape_length(
         flight, flight_depower_match(LEI_V3_DATA_DIR, 2019)
     )

@@ -13,7 +13,6 @@ from awetrim.system.factory import create_system_model_from_yaml
 from awetrim.kinematics.parametrized_patterns import (
     make_bspline_path_parameters_from_named_curve,
 )
-from awetrim.identification.controls import ROM_POWERED_INPUT_DEPOWER
 from awetrim.utils.config_paths import (
     LEI_V3_DOWNLOOP_SPLINE_CONFIG,
     LEI_V3_ROM_AEROSTRUCTURAL_CONFIG,
