@@ -119,7 +119,11 @@ src/awetrim/
                          turn-radius constraint (the full-cycle seeds emit
                          0.2; a collapsed sigma' is a spline cusp that breaks
                          the node trim). The power objective's scale is
-                         floored at 0.25 mean|P| of the warm start. All
+                         floored at 0.25 mean|P| of the warm start.
+                         sim_parameters.reg_fraction: the control-smoothness
+                         term (reg) weighted to that fraction of |objective|
+                         at the NLP's initial point (phase.relative_reg_weight;
+                         an explicit reg_weight wins). All
                          opt-in keys off = NLP unchanged)
   environment/       ✅  Wind (uniform / logarithmic / power_law / explog /
                          jet / tabulated). profile_laws.py is the ONLY place the
