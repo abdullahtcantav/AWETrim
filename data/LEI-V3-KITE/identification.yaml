@@ -98,9 +98,13 @@ sweep:
       depower:
         targets: [1.10, 2.60]
         step: 0.05
-      # Near the 2019 reel-out and reel-in tapes.
+      # Across the ROM band (fit: depower_band), through both flight-match
+      # tapes (fit: flight_match): 1.95 ~ reel-out, 2.40 = reel-in; 1.70 / 2.10
+      # are the flown tapes. To 0.20 m = |u_s| 0.14, toward the flown 0.175
+      # (KCU clip); the stall stop ends a chain earlier where the tip stalls.
       steering:
-        power_tape_lengths: [1.70, 2.10]
+        power_tape_lengths: [1.40, 1.70, 1.95, 2.10, 2.40]
+        max: 0.20
 
 fit:
   # The area the ROM's coefficients are normalised by [m2]: the EKF / flight
@@ -151,4 +155,19 @@ fit:
       # [N]: 2 x KCU weight (22.2 kg flown) after a 15 % speed lull,
       # 435 N / 0.85^2.
       validity:
+        # the ROM band (the optimiser's depower box is clipped to it); the fit
+        # reaches 1.25 m only so the ROM sees the force peak
+        input_depower: [1.30, 2.60]
         min_tether_force_n: 602.0
+      # The model tape that reproduces each flown phase (documentation; the
+      # fit does not read it). Matched on near-straight samples of the 2019
+      # flight: the model's u_s = 0 tether force vs v_a against the flight's
+      # binned medians (the wes-quasi-steady u_dp attribution). Reel-in is
+      # anchored at the flown v_a; force alone gives ~2.50 with a ~12 % curve
+      # shape mismatch, as in the paper. UPDATE whenever the sweep model
+      # changes and the match is redone; the steering tapes follow it.
+      flight_match:
+        flight: 2019
+        date: 2026-10-28
+        reel_out: 1.94
+        reel_in: 2.40

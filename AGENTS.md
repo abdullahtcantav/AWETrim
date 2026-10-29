@@ -193,15 +193,19 @@ ROM is **script-based**, not a `src/` module: see `examples/4_trajectory_optimiz
 (`optimization/`, `validation/`), configured via the ROM config the kite's
 `system.yaml` selects (`models.reduced_order.aerodynamics`, resolved by
 `system.factory.resolve_rom_config_path`; fallback a sibling `rom_config.yaml`).
-The LEI-V3 has two: `rom_config_aerostructural.yaml` (identified from the coupled
-Billow-wireframe centre-window simulations only, on the private _billow9
-campaign; the public step 3 does the same on continuation chains of either
-fidelity (`fidelity: billow | wireframe`):
+The LEI-V3 has two: `rom_config_aerostructural.yaml` (the DEFAULT in every
+LEI-V3 system file since 2026-10-29: identified from simulations only, by the
+public step 3 on the FEM-reduced wireframe with canopy billowing and the
+strut-lever load transfer (`fidelity: wireframe` of `identification.yaml`):
 `examples/3_rom_identification/run_identification_sweep.py` then
 `identify_rom_aerostructural.py`, both reading `data/<kite>/identification.yaml`,
-writing under `results/<kite>/identification/<fidelity>/`) and
-`rom_config_aerostructural_flight_corrected.yaml` (the DEFAULT in every
-LEI-V3 system file: the aerostructural one with
+writing under `results/<kite>/identification/<fidelity>/`; band 1.30-2.60 m,
+tension floor `validity.min_tether_force_n` 602 N, roll gain k(u_p) quadratic;
+`fit.fidelities.wireframe.flight_match` records the model tapes that reproduce
+the 2019 reel-out / reel-in, to be updated whenever the match is redone) and
+`rom_config_aerostructural_flight_corrected.yaml` (STALE: the flight correction
+of the PREVIOUS aerostructural ROM (_billow9 PSM wireframe), kept until it is
+redone on the current one; the method:
 theta_b and a single-input dC_D(u_p, u_s^2) fitted to 2019 flight, cycles 60-67
 held out: `identify_rom_flight_correction.py` (equation error: theta_b from the
 flight LIFT, drag at equal lift) then `refine_rom_flight_output_error.py`
@@ -231,7 +235,10 @@ first-class cycle metric next to the mean power in `cycle_comparison_plots`.
 **ROM parameter names** (`aerodynamics.params`, read by `system/kite.py`):
 `angle_pitch_tether_0` + `slope_angle_pitch_tether_depower` give the bridle
 pitch theta_b(u_p) in the PAPER sign, `alpha_w = alpha_b - theta_b`;
-`gain_roll_steering` is k_phi,s (`phi_a,w = k u_s`, asymmetric steering); both
+`gain_roll_steering` is k_phi,s (`phi_a,w = k u_s`, asymmetric steering), made
+depower-dependent by the optional `gain_roll_steering_depower: [k1, k2, ...]`
+(`k(u_p) = gain_roll_steering + k1 u_p + k2 u_p^2 ...`, `Kite.gain_roll_steering_for`;
+absent = the paper's constant gain); both
 angles are taken in the paper's App. D apparent-wind frame, which
 `Kite._force_in_wind_frame` builds from the v_a VECTOR (until 2026-10-06 an
 Euler-angle frame with a mirrored yaw sign put the bridle pitch 2-3 deg off

@@ -153,8 +153,10 @@ components:
       gear_ratio: 6.2
 
 # Reduced-order model this system runs with (awetrim.system.factory.
-# resolve_rom_config_path). The LEI-V3 has rom_config_aerostructural_flight_corrected.yaml (the default)
-# (flight-calibrated) and rom_config_aerostructural.yaml (simulation-only).
+# resolve_rom_config_path). The LEI-V3 default is rom_config_aerostructural.yaml
+# (simulation-only: FEM-reduced wireframe with canopy billowing, identified
+# 2026-10-29). rom_config_aerostructural_flight_corrected.yaml is the flight
+# correction of the PREVIOUS aerostructural ROM; redo it before using it.
 models:
   reduced_order:
-    aerodynamics: rom_config_aerostructural_flight_corrected.yaml
+    aerodynamics: rom_config_aerostructural.yaml

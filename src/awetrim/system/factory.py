@@ -174,6 +174,20 @@ def load_aero_input(
     return cfg.get("wing", {}).get("aerodynamics", {})
 
 
+def load_rom_validity(
+    cfg: dict,
+    config_path: Union[str, Path, None] = None,
+    aero_yaml_path: Union[str, Path, None] = None,
+) -> dict:
+    """The ``validity`` block of the system's ROM file (empty when the ROM is
+    inline or the file states none)."""
+    base_path = Path(config_path) if config_path is not None else None
+    aero_path = _resolve_aero_config_path(cfg, base_path, aero_yaml_path)
+    if aero_path is None:
+        return {}
+    return _load_yaml(aero_path).get("validity") or {}
+
+
 def load_rom_depower_validity(
     cfg: dict,
     config_path: Union[str, Path, None] = None,
@@ -187,14 +201,38 @@ def load_rom_depower_validity(
     bottom of the 1.1 m box at the winch limits). ``None`` when the ROM is
     inline or the file states no band.
     """
-    base_path = Path(config_path) if config_path is not None else None
-    aero_path = _resolve_aero_config_path(cfg, base_path, aero_yaml_path)
-    if aero_path is None:
-        return None
-    band = ((_load_yaml(aero_path).get("validity") or {}).get("input_depower"))
+    band = load_rom_validity(cfg, config_path, aero_yaml_path).get("input_depower")
     if not band:
         return None
     return float(min(band)), float(max(band))
+
+
+def apply_tension_floor(hardware_limits: dict, floor: float | None) -> dict:
+    """Raise the optimizer's tether-tension lower bound to the ROM's floor.
+
+    ``validity.min_tether_force_n`` is the lowest tension at which the ROM's
+    wing still holds its shape through a gust lull (identification step 3:
+    F_t (1 - lull)^2 >= 2 m_KCU g). Below it the identified states do not
+    exist, so the optimizer must not fly there. The bound acts on the ground
+    tension the NLP carries; the kite-end tension is lower only by the tether
+    weight share. A run that wants the bare numerical bound overrides it
+    through ``sim_parameters["opti_limits_override"]["tension_tether_ground"]``.
+    """
+    if floor is None:
+        return hardware_limits
+    from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
+
+    lo, hi = hardware_limits.get(
+        "tension_tether_ground", DEFAULT_OPTI_LIMITS["tension_tether_ground"]
+    )
+    if float(floor) <= float(lo):
+        return hardware_limits
+    if float(floor) >= float(hi):
+        raise ValueError(
+            f"ROM tension floor {floor} N is above the tension bound {hi} N"
+        )
+    print(f"  tension lower bound raised to the ROM floor: {float(floor):.0f} N")
+    return {**hardware_limits, "tension_tether_ground": (float(floor), float(hi))}
 
 
 def intersect_depower_validity(
@@ -413,6 +451,12 @@ def create_system_model_from_yaml(
             load_rom_depower_validity(
                 cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
             ),
+        )
+        hardware_limits = apply_tension_floor(
+            hardware_limits,
+            load_rom_validity(
+                cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
+            ).get("min_tether_force_n"),
         )
 
     tether = create_tether_from_config(

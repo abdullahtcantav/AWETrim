@@ -498,6 +498,14 @@ class Kite(Wing):
             self.gain_roll_steering = gain
         else:
             self.gain_roll_steering = 1.0
+        # Depower dependence of that gain, k(u_p) = gain_roll_steering
+        # + k1 u_p + k2 u_p^2 ...: polynomial coefficients [k1, k2, ...] in
+        # u_p's own unit. The wing rolls less per unit steering when fully
+        # powered (LEI-V3 sweep: -19 deg per u_s at 1.40 m, -34 at 2.10 m).
+        # Absent/empty = the constant gain of the paper's Eq. 43.
+        self.gain_roll_steering_depower = [
+            float(c) for c in (self.aero_params.get("gain_roll_steering_depower") or [])
+        ]
         # Sideslip -> aerodynamic roll, phi_a,w += gain_roll_sideslip * beta_a
         # [rad per rad], beta_a = angle_sideslip_for(model): the restoring roll
         # (weathercock / sideforce) of a wing flying in sideslip, which the
@@ -556,8 +564,15 @@ class Kite(Wing):
     def angle_roll_aerodynamic(self):
         return self.angle_roll_aerodynamic_for(self)
 
+    def gain_roll_steering_for(self, model):
+        """k(u_p) [rad per u_s]: the constant gain plus its depower polynomial."""
+        gain = self.gain_roll_steering
+        for power, coef in enumerate(self.gain_roll_steering_depower, start=1):
+            gain = gain + coef * model.input_depower**power
+        return gain
+
     def angle_roll_aerodynamic_for(self, model):
-        roll = model.input_steering * self.gain_roll_steering
+        roll = model.input_steering * self.gain_roll_steering_for(model)
         if self.gain_roll_sideslip:
             roll = roll + self.gain_roll_sideslip * self.angle_sideslip_for(model)
         return roll

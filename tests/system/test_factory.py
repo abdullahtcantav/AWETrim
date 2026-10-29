@@ -251,6 +251,23 @@ def test_intersect_depower_validity_rules():
         intersect_depower_validity({"input_depower": (1.1, 1.3)}, (1.6, 2.2))
 
 
+def test_apply_tension_floor_rules():
+    from awetrim.system.factory import apply_tension_floor
+    from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
+
+    assert apply_tension_floor({"a": 1}, None) == {"a": 1}
+    hw = apply_tension_floor({}, 602.0)
+    assert hw["tension_tether_ground"] == (
+        602.0, DEFAULT_OPTI_LIMITS["tension_tether_ground"][1]
+    )
+    # a floor below the existing bound leaves it alone
+    assert apply_tension_floor({"tension_tether_ground": (800.0, 1e5)}, 602.0) == {
+        "tension_tether_ground": (800.0, 1e5)
+    }
+    with pytest.raises(ValueError):
+        apply_tension_floor({"tension_tether_ground": (300.0, 500.0)}, 602.0)
+
+
 def test_legacy_config_yields_empty_hardware_limits(tmp_path):
     # The legacy format has no actuator-limit block -> the optimizer falls back
     # entirely to DEFAULT_OPTI_LIMITS.

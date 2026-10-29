@@ -62,8 +62,9 @@ The seed is written to `<kite>/cycle_configs/`, results to
 - ROM aero parameters are identified in [step 3](../3_rom_identification/)
   and, with flight data, corrected in [step 5](../5_flight_data/); the coefficient definitions
   live in the ROM config the kite's `system.yaml` selects (LEI-V3:
-  `rom_config_aerostructural_flight_corrected.yaml` by default, or
-  `rom_config_aerostructural.yaml`; the paper's semi-empirical ROM was removed
+  `rom_config_aerostructural.yaml` by default; its flight correction
+  `rom_config_aerostructural_flight_corrected.yaml` was made on the previous
+  ROM and is stale until redone; the paper's semi-empirical ROM was removed
   2026-10-07 and is archived in git history). The depower input the ROM was identified on is a
   per-kite convention (V3: power-tape length in metres; a kite logging a
   normalised signal uses that) declared in that file's `controls.input_depower` block and read by
