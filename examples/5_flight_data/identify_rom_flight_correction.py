@@ -107,7 +107,6 @@ from awetrim.system.kite import stall_blend
 from awetrim.utils.config_paths import (
     LEI_V3_DATA_DIR,
     LEI_V3_ROM_AEROSTRUCTURAL_CONFIG,
-    LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG,
     LEI_V3_SYSTEM_FLOWN_CONFIG,
 )
 
@@ -477,13 +476,10 @@ def plot(train, test, theta, drag_fit, params, path: Path,
             g = both[both.phase == ph]
             ax.scatter(g.u_p, np.rad2deg(g.theta_needed), s=3, alpha=0.15, color=colour,
                        label=f"flight lift needs, {ph}", rasterized=True)
-    u = np.linspace(1.6, 2.2, 20)
+    reel_out, reel_in = flight_depower_match(LEI_V3_DATA_DIR, 2019)
+    u = np.linspace(reel_out - 0.1, reel_in + 0.1, 20)
     relations = [(params, PALETTE["Black"], "aerostructural"),
                  (theta, PALETTE["Bluish Green"], "flight-corrected")]
-    if LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG.exists():  # archived; only on a checkout of it
-        semi = yaml.safe_load(LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG.read_text(encoding="utf-8"))
-        relations.append((semi["aerodynamics"]["params"], PALETTE["Reddish Purple"],
-                          "semi-empirical"))
     for p, colour, label in relations:
         ax.plot(u, np.rad2deg(theta_as(p, u)), color=colour, lw=1.8, label=label)
     ax.set_xlabel(r"$u_p$ (m)")

@@ -25,13 +25,14 @@ from awetrim.utils.config_paths import (
 )
 from awetrim.utils.utils import load_cycle_config_from_yaml
 
-# Initial-curve shape (matches the defaults in generate_spline_config.py).
+# Initial-curve shape (the NLP-building tests).
 _M = 10
 _R0 = 230.0
 _S_INIT = 0.0
 _S_FINAL = 2.0 * np.pi
 _CURVE_KWARGS = dict(az_amp0=0.32, beta0=0.3, beta_amp0=0.15, downloops=True)
-# The figure test_spline_phase_runs_quasi_steady FLIES node by node: one the
+# The figure test_spline_phase_runs_quasi_steady FLIES node by node (also the
+# generate_spline_config.py default): one the
 # LEI-V3 can fly at 10 m/s inside its ROM's identified steering (|u_s| <= 0.143;
 # 0.133 at most on all three curves, lowest point 0.1 rad above the horizon).
 # The 0.32 / 0.15 rad one at 230 m above needs |u_s| up to 0.47 and post-stall

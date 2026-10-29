@@ -43,14 +43,18 @@ SPLINE_TYPE = "periodic"  # "periodic" or "open"
 DOWNLOOPS = True
 
 M = 10
-R0 = 230.0
+# A figure the LEI-V3 flies at 10 m/s inside its ROM's identified steering
+# (|u_s| <= 0.143; at most 0.133 for all three curve types, the flying test of
+# tests/timeseries/test_spline_phase_integration.py). The 0.35 / 0.15 rad
+# figure at 230 m used until 2026-10-29 needed |u_s| up to 0.47.
+R0 = 300.0
 S_INIT = 0.0
 S_FINAL = 2.0 * np.pi
 N_FIT = 400
 
-AZ_AMP0 = 0.35
-BETA0 = 0.3
-BETA_AMP0 = 0.15
+AZ_AMP0 = 0.65
+BETA0 = 0.4
+BETA_AMP0 = 0.30
 
 
 def write_cycle_config_from_template(

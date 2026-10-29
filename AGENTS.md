@@ -220,15 +220,15 @@ hold-out cycles 60-67, median tension / v_tau error: reel-out +3.7 % / +1.0 %
 the method:
 theta_b and a single-input dC_D(u_p, u_s^2) fitted to 2019 flight, cycles 60-67
 held out: `identify_rom_flight_correction.py` (equation error: theta_b from the
-flight LIFT, drag at equal lift) then `refine_rom_flight_output_error.py`
+flight LIFT, drag at equal lift) then `refine_rom_flight_output_error.py` (both
+in `examples/5_flight_data/`)
 (output error on the quasi-steady tension and v_tau, with the roll gain set by
 the turn-rate law -- the solved steering regressing 1:1 on the logged steering
 -- which edits the file in place; the equation-error values alone do not transfer to the rigid-tether
 quasi-steady solve)). The paper's semi-empirical ROM
 (`rom_config_semi_empirical.yaml`) was removed on 2026-10-07 after the
 comparison in `docs/identification/`; it lives in git history (last at
-commit bad8a9b) and `config_paths.LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG` keeps its
-path so the comparison scripts run on a checkout of it.
+commit bad8a9b).
 
 Full-cycle optimisation scripts (`optimization/cycle/`): `fit_periodic_cycle_config.py`
 + `run_full_cycle_opti.py` (multi-lobe cycle; closed through the `periodic_wrap` seam, the closing stage uses the one-sided `close_radial_cycle` pin; step boxes ±0.15 rad / ±50 m in the closing stage, 4x that in the power stage and polish; `--step-scale` scales the latter; the closing stage holds the depower profile, except on a `--continue-from` run, where it anchors it with `depower_anchor_weight` 0.05 so a wind continuation can depower into the rated region). Studies

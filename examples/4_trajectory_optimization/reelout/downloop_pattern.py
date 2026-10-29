@@ -17,7 +17,6 @@ from awetrim.utils.config_paths import (
     LEI_V3_DOWNLOOP_SPLINE_CONFIG,
     LEI_V3_ROM_AEROSTRUCTURAL_CONFIG,
     LEI_V3_ROM_AEROSTRUCTURAL_FLIGHT_CONFIG,
-    LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG,
     LEI_V3_SYSTEM_CONFIG,
     LEI_V3_SYSTEM_FLOWN_2019_CONFIG,
 )
@@ -48,7 +47,6 @@ RESULTS_DIR = (
 )
 #: --rom choices (default: the one the system file selects).
 ROM_CONFIGS = {
-    "semi_empirical": LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG,
     "aerostructural": LEI_V3_ROM_AEROSTRUCTURAL_CONFIG,
     "aerostructural_flight": LEI_V3_ROM_AEROSTRUCTURAL_FLIGHT_CONFIG,
 }

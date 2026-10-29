@@ -35,17 +35,16 @@ from awetrim.utils.system_config import get_kite, get_tether
 RUN_WILLIAMS = False
 RUN_RIGID = True
 
-# Which ROM to validate: the system file's default (flight-corrected), a named
+# Which ROM to validate: the system file's default (aerostructural), a named
 # LEI-V3 ROM, or a path. The KCU drag of a ROM whose C_D excludes it comes
 # from the flown system's KCU hardware (factory-built Kite).
 ROM_CONFIGS = {
-    "semi_empirical": "rom_config_semi_empirical.yaml",
     "aerostructural": "rom_config_aerostructural.yaml",
     "aerostructural_flight": "rom_config_aerostructural_flight_corrected.yaml",
 }
 _parser = argparse.ArgumentParser(description="ROM quasi-steady validation, LEI-V3 2019")
 _parser.add_argument("--rom", default=None,
-                     help="semi_empirical | aerostructural | aerostructural_flight | path (default: system file's)")
+                     help="aerostructural | aerostructural_flight | path (default: system file's)")
 _parser.add_argument("--cycles", default="64",
                      help="cycle numbers, e.g. 64 or 60-67 (default: %(default)s)")
 _parser.add_argument("--no-show", action="store_true", help="never open windows")
