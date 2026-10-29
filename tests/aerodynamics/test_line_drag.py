@@ -56,13 +56,13 @@ from awetrim.aerodynamics.line_drag import (
     tape_thickness_from_equivalent_diameter,
 )
 
-#: LEI-V3 steering/depower tape, as data/LEI-V3-KITE/struc_geometry.yaml holds it.
+#: LEI-V3 steering/depower tape, as data/LEI-V3-KITE/struc_geometry_FEM_full.yaml holds it.
 WIDTH = 0.012
 THICKNESS = 0.0015
 DIAMETER_STRUCTURAL = 0.004787307
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STRUC_GEOMETRY = PROJECT_ROOT / "data" / "LEI-V3-KITE" / "struc_geometry.yaml"
+STRUC_GEOMETRY = PROJECT_ROOT / "data" / "LEI-V3-KITE" / "struc_geometry_FEM_full.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -227,7 +227,7 @@ def test_structural_diameters_are_never_touched(struc_geometry):
 def test_only_the_tape_segments_change(struc_geometry):
     round_d = bridle_drag_diameters(struc_geometry, ROLL_ROUND)
     tape_d = bridle_drag_diameters(struc_geometry, ROLL_AVERAGED)
-    assert len(round_d) == len(tape_d) == 45
+    assert len(round_d) == len(tape_d) == 87  # the FEM bridle, pulley rows expanded
     changed = [i for i, (a, b) in enumerate(zip(round_d, tape_d)) if a != b]
     # Two steering tapes + one depower tape.
     assert len(changed) == 3

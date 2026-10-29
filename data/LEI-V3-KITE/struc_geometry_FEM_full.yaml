@@ -383,7 +383,12 @@ bridle_connections:
     - [br_5_equiv, 85, 86]
 
 bridle_lines:
-  headers: [name, l0, d, material, linktype]
+  # w [m]: flat-tape width, on the steering and depower tapes only (12 x 1.5
+  # mm webbing). Their d is the area-equivalent diameter (mass, EA; was a
+  # rounded 5 mm); the drag uses the width (awetrim.aerodynamics.line_drag).
+  # Added 2026-10-29: the ROM identified that day ran with these tapes as
+  # 5 mm round lines.
+  headers: [name, l0, d, material, linktype, w]
   data:
     #front
     - [a1_b1, 0.330, 0.002, dyneema, 'pulley']
@@ -431,7 +436,7 @@ bridle_lines:
     # rear lines
     - [Br_5, 12.168, 0.002, dyneema, 'pulley']
     - [M, 4.856, 0.005, dyneema, 'pulley']
-    - [steering_tape, 1.6, 0.005, dyneema, 'noncompressive']
+    - [steering_tape, 1.6, 0.004787307, dyneema, 'noncompressive', 0.012]
     # l_d = 0.2+u_dp*5
     # l_d(0.34) = 0.2+0.34*5 = 1.9 m
-    - [depower_tape, 1.9, 0.005, dyneema, 'noncompressive']
+    - [depower_tape, 1.9, 0.004787307, dyneema, 'noncompressive', 0.012]
