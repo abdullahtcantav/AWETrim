@@ -508,6 +508,12 @@ class Kite(Wing):
             c if isinstance(c, (ca.MX, ca.SX)) else float(c)
             for c in (self.aero_params.get("gain_roll_steering_depower") or [])
         ]
+        # Scale on the WHOLE k(u_p), not a ROM parameter: 1 except during the
+        # roll-gain continuation of the full-cycle optimizer, which marches a
+        # seed the kite cannot turn through at an assisted gain and steps it
+        # back to 1 (examples/4_trajectory_optimization/cycle/
+        # run_full_cycle_opti.march_with_roll_assist).
+        self.gain_roll_scale = 1.0
         # Sideslip -> aerodynamic roll, phi_a,w += gain_roll_sideslip * beta_a
         # [rad per rad], beta_a = angle_sideslip_for(model): the restoring roll
         # (weathercock / sideforce) of a wing flying in sideslip, which the
@@ -571,6 +577,8 @@ class Kite(Wing):
         gain = self.gain_roll_steering
         for power, coef in enumerate(self.gain_roll_steering_depower, start=1):
             gain = gain + coef * model.input_depower**power
+        if self.gain_roll_scale != 1.0:
+            gain = self.gain_roll_scale * gain
         return gain
 
     def angle_roll_aerodynamic_for(self, model):

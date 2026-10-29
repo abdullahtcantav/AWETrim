@@ -153,6 +153,16 @@ def test_roll_gain_depower_polynomial():
     assert float(f(u_s, u_p)) == pytest.approx(expected)
 
 
+def test_roll_gain_scale_multiplies_the_whole_gain():
+    kite = _kite({"gain_roll_steering": -0.5, "gain_roll_steering_depower": [0.2, -0.05]})
+    kite.gain_roll_scale = 1.5
+    model = _model(kite)
+    f = ca.Function("roll", [model.input_steering, model.input_depower],
+                    [kite.angle_roll_aerodynamic_for(model)])
+    u_s, u_p = 0.1, 2.0
+    assert float(f(u_s, u_p)) == pytest.approx(1.5 * u_s * (-0.5 + 0.2 * u_p - 0.05 * u_p**2))
+
+
 def test_reference_area_overrides_the_system_area():
     assert _kite({}).area_wing == pytest.approx(5.0)
     assert _kite({}, reference_area=17.2119).area_wing == pytest.approx(17.2119)
