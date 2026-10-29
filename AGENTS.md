@@ -211,8 +211,9 @@ mapped onto the ROM's u_p (`flight_depower_to_power_tape_length(.., match)`,
 the match required: the flown tape is not known from the logs, the 1.7 / 2.1
 m that stood in `controls` until 2026-10-29 was the previous model's match;
 the cycle and flight scripts pass it, `cycle_profile.yaml` is stated in it) and
-`rom_config_aerostructural_flight_corrected.yaml` (the 2019 flight correction
-of that ROM, redone 2026-10-29 with the flight depower read through
+`rom_config_aerostructural_flight_corrected.yaml` (NOT YET REVIEWED by the
+author -- provisional, check it thoroughly before relying on it: the 2019
+flight correction of that ROM, redone 2026-10-29 with the flight depower read through
 flight_match, on the 2019 EKF re-run with the bridle in the kite mass;
 hold-out cycles 60-67, median tension / v_tau error: reel-out +3.7 % / +1.0 %
 (uncorrected +3.8 % / +2.3 %), reel-in +30 % / +6 % (uncorrected +57 % /

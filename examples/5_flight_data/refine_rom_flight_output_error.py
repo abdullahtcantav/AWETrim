@@ -1,5 +1,7 @@
 """Output-error refinement of the flight-corrected aerostructural ROM.
 
+NOT YET REVIEWED: the flight correction (steps 1-3) has not been checked thoroughly by the author; treat its coefficients and polars as provisional.
+
 Step 3 of the flight correction (step 1-2: identify_rom_flight_correction.py).
 Steps 1-2 fit theta_b and dC_D to the EKF coefficients at the flown state. The
 quasi-steady reconstruction does not land at that state, though: theta_b was
