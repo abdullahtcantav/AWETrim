@@ -279,7 +279,11 @@ def _extract_params_awesio(cfg: dict) -> tuple:
     cs_struct = kite.get("control_system", {}).get("structure", {})
     tether_struct = get_tether(cfg).get("structure", {})
 
-    mass_wing = wing_struct.get("mass", 20.0)
+    # The point-mass "wing" is everything airborne above the KCU: the canopy
+    # (wing.structure.mass) AND the bridle (bridle.structure.mass), whose
+    # weight the wing carries. Until 2026-10-29 the bridle was left out.
+    bridle_struct = (kite.get("bridle") or {}).get("structure", {}) or {}
+    mass_wing = wing_struct.get("mass", 20.0) + float(bridle_struct.get("mass", 0.0) or 0.0)
     area_wing = wing_struct.get("projected_surface_area", 20.0)
     mass_kcu = cs_struct.get("mass", 0.0)
     # KCU envelope, used for its bluff-body drag (awetrim.aerodynamics.
