@@ -5,10 +5,10 @@ full model needs: 28 canopy sections, strut tubes with intermediate chord
 nodes, and the complete bridle down to the individual a/b/c/d lines that fan
 onto each strut. A wireframe has none of that. It needs one rib per strut with
 two wing nodes -- where the front and the rear bridle attach -- and the lines
-between them, which is what ``struc_geometry_PSM_reduced.yaml`` is. That file
-is an exact reduction of the full one, and this module performs the same
-reduction from the full geometry, so a wireframe and a Billow run start from
-one input file.
+between them, which is what ``struc_geometry_PSM_reduced.yaml`` was (removed
+2026-10-29, in v0.1.0). That file was an exact reduction of the full one, and
+this module performs the same reduction from the full geometry, so a
+wireframe and a Billow run start from one input file.
 
 **Bridle.** Rules read off the two files, not invented:
 

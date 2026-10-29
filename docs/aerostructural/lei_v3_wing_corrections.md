@@ -77,7 +77,8 @@ aerodynamic mesh. Billow full computes it, within the caveat above.
 ## 2. The short structural chord (x1.129, LEI-V3 only)
 
 The PSM wireframe (`struc_geometry.yaml`,
-`struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml`) puts the wing
+`struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml`, removed on
+2026-10-29 and kept in v0.1.0) puts the wing
 nodes at the bridle attachment points. The TE node is the strut's rear
 bridle point, not the end of the fabric (x/c about 0.01 to 0.90). An
 aerodynamic mesh built on those nodes (`LinearStructuralToAeroMapper`) flies

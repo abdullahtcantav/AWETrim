@@ -59,7 +59,12 @@ def test_the_warning_can_be_switched_off(caplog):
 
 
 def _psm():
-    return yaml.safe_load((KITE_DIR / "struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml").read_text(encoding="utf-8"))
+    """The LEI-V3 PSM-format wireframe: the reduction of the FEM geometry."""
+    from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
+
+    return reduce_fem_geometry(
+        yaml.safe_load((KITE_DIR / "struc_geometry_FEM_full.yaml").read_text(encoding="utf-8"))
+    )
 
 
 def test_the_lei_v3_geometries_are_symmetric():

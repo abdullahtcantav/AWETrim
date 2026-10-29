@@ -19,10 +19,10 @@
 #              for both fidelities), flying the full geometry's aerodynamic
 #              mesh with canopy billowing and the exact (strut-lever) load
 #              transfer (docs/aerostructural/). The official identification
-#              since 2026-10-28. Until then this block flew the PSM wireframe
-#              (struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml: short
-#              chord, 17.2 m2, TE rest lengths cut to 0.95 x CAD by hand), the
-#              model the shipped rom_config_aerostructural.yaml was identified on.
+#              since 2026-10-28 (rom_config_aerostructural.yaml, 2026-10-29).
+#              Until then this block flew the PSM wireframe (short chord,
+#              17.2 m2, TE rest lengths cut to 0.95 x CAD by hand; removed
+#              2026-10-29, in v0.1.0).
 
 fidelity: wireframe
 

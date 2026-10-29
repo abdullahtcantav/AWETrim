@@ -411,23 +411,29 @@ def calculate_inertia(nodes, desired_point=(0.0, 0.0, 0.0)):
 
 
 def compute_kite_aggregate(struc_geometry, system_config) -> dict:
-    """Compute the aggregate kite mass, CG, and inertia from the full PSS system.
+    """Compute the aggregate kite mass, CG, and inertia from the structural nodes.
 
     The kite aggregate (wing + bridle + KCU) is *derived*, not stored in
     ``system.yaml``: the total mass is the sum of the nodal masses, while the CG
     and inertia tensor require the structural node distribution and are therefore
-    computed from the PSS particle system rather than from the per-component
-    summaries. ``system_config`` is the awesIO system config (used for the KCU
-    mass); ``struc_geometry`` is the parsed structural-geometry dict.
+    computed from the structural nodes (the full FEM geometry or a PSM-format
+    wireframe) rather than from the per-component summaries. ``system_config``
+    is the awesIO system config (used for the KCU mass); ``struc_geometry`` is
+    the parsed structural-geometry dict.
 
     Returns a dict with ``mass`` (kg), ``center_of_mass`` ([x, y, z] m), and
     ``inertia_tensor`` (3x3, kg·m², about the CG).
     """
     # Imported lazily so this lightweight, widely-imported module does not pull in
-    # the PSS structural solver at import time.
-    from awetrim.aerostructural.wireframe.structural_geometry_io import main as pss_initialize
-
-    result = pss_initialize(struc_geometry, system_config=system_config)
+    # the structural readers at import time.
+    if "strut_tubes" in struc_geometry:
+        # the full FEM geometry (tubes, canopy sections, the complete bridle)
+        from awetrim.aerostructural.coupled.read_struc_geometry_yaml import main as read
+        result = read(struc_geometry, config=None, system_config=system_config)
+    else:
+        # a PSM-format wireframe, e.g. a deformed snapshot
+        from awetrim.aerostructural.wireframe.structural_geometry_io import main as read
+        result = read(struc_geometry, system_config=system_config)
     struc_nodes, m_arr = result[0], result[1]
 
     total_mass = float(np.sum(m_arr))

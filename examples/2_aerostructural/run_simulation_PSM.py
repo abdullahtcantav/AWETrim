@@ -9,10 +9,9 @@ the SAME geometry file run_simulation_BILLOW.py reads
 (struc_geometry_FEM_full.yaml) -- the per-strut line fans collapsed to one
 equivalent line each, the tube and canopy stiffnesses taken from the Billow
 materials -- so with the same inputs the two scripts differ only in the
-structural model. The reduced geometry is saved in the case folder.
-
-This is not the photogrammetry-corrected PSM geometry of the wes-quasi-steady
-paper (awetrim.aerostructural.wireframe.driver.solve_deformation loads that).
+structural model. The reduced geometry is saved in the case folder. (The
+photogrammetry-corrected PSM geometry of the wes-quasi-steady paper is no
+longer shipped; it is in the v0.1.0 release.)
 
 Edit the inputs below, then from the project root:
 

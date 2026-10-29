@@ -246,12 +246,23 @@ def test_wing_le_te_indices_rejects_unpaired_nodes():
 # --------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def kite_files():
-    struc = KITE_DIR / "struc_geometry.yaml"
+def kite_files(tmp_path_factory):
+    """A PSM-format geometry file (the FEM reduction, as a deformed snapshot
+    is written) beside the kite's system.yaml."""
+    from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
+
+    fem = KITE_DIR / "struc_geometry_FEM_full.yaml"
     system = KITE_DIR / "system.yaml"
-    if not struc.exists() or not system.exists():  # pragma: no cover
+    if not fem.exists() or not system.exists():  # pragma: no cover
         pytest.skip(f"{KITE_DIR} not available")
-    return struc, system
+    folder = tmp_path_factory.mktemp("lei_v3")
+    struc = folder / "struc_geometry.yaml"
+    struc.write_text(
+        yaml.safe_dump(reduce_fem_geometry(yaml.safe_load(fem.read_text(encoding="utf-8")))),
+        encoding="utf-8",
+    )
+    (folder / "system.yaml").write_text(system.read_text(encoding="utf-8"), encoding="utf-8")
+    return struc, folder / "system.yaml"
 
 
 def test_load_psm_geometry_matches_the_pss_initializer(kite_files):

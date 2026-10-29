@@ -112,7 +112,8 @@ def _load_rigid_body_axes_from_result(result_path: Path, struc_override: Path | 
     Priority (same as plot_body_axes.py):
       1. struc_override (explicit --rigid-body-struc)
       2. {result_path}/struc_geometry.yaml  (deformed, saved by save_geometry_snapshot)
-      3. HDF5 positions + data/{kite}/struc_geometry.yaml  (fallback)
+      3. HDF5 positions + data/{kite}/deformed_results/powered_2019/struc_geometry.yaml
+         (fallback, a PSM-format wireframe with the same node numbering)
 
     Masses and the KCU mass come from the PSS initializer, which reads the
     system.yaml beside the geometry (single source of the KCU mass).
@@ -147,14 +148,9 @@ def _load_rigid_body_axes_from_result(result_path: Path, struc_override: Path | 
                 )
                 project_root = Path(*parts[:ri])
                 kite_data = project_root / "data" / kite_name
-                fallback = kite_data / "struc_geometry.yaml"
-                if not fallback.exists():
-                    fallback = (
-                        kite_data
-                        / "deformed_results"
-                        / "powered_2019"
-                        / "struc_geometry.yaml"
-                    )
+                fallback = (
+                    kite_data / "deformed_results" / "powered_2019" / "struc_geometry.yaml"
+                )
             except (StopIteration, IndexError):
                 raise FileNotFoundError(
                     "Could not infer struc_geometry path from result layout."

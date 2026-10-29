@@ -4,9 +4,8 @@ Coupled VSM + Billow states at the centre of the wind window, gravity off,
 along continuation chains, at either structural fidelity (`fidelity` in
 identification.yaml, or --fidelity): `billow`, the full model (tube beams,
 membrane canopy, bridle), or `wireframe`, the bridle line system. The
-wireframe either reads its own geometry (`struc_geometry`, the PSM file the
-shipped ROM was identified on) or, with `fem_geometry`, is reduced from the
-full FEM file and flies its full-chord aerodynamic mesh
+wireframe is reduced from the same full FEM file (`fem_geometry`, default the
+kite's struc_geometry_FEM_full.yaml) and flies its full-chord aerodynamic mesh
 (wireframe.driver.build_case_reduced_fem: one structural file for both
 fidelities; billowed with aerodynamic.billowing.contraction, loads moved with
 aerodynamic.load_transfer: strut_lever):
@@ -74,7 +73,11 @@ import pandas as pd
 
 from awetrim.aerostructural import aerodynamic_vsm
 from awetrim.aerostructural.billow.driver import merge_config
-from awetrim.aerostructural.case import air_density_at_case, resolve_kite_paths
+from awetrim.aerostructural.case import (
+    DEFAULT_STRUC_GEOMETRY_FILENAME,
+    air_density_at_case,
+    resolve_kite_paths,
+)
 from awetrim.aerostructural.results import save_sim_output
 from awetrim.aerostructural.utils import load_yaml
 from awetrim.identification import aerostructural_dataset as ds
@@ -165,22 +168,15 @@ def open_case(fidelity: str, spec: dict, kite: str):
 
         config_path, _, _ = resolve_kite_paths(PROJECT_DIR, kite)
         config = merge_config(load_yaml(config_path), spec.get("config_overrides"))
-        if spec.get("fem_geometry"):
-            # the wireframe reduced from the full FEM file (one structural
-            # file for both fidelities), its aero mesh the full geometry's
-            # (billowed when aerodynamic.billowing.contraction > 0)
-            case = driver.build_case_reduced_fem(
-                config=config, kite_name=kite, project_dir=PROJECT_DIR,
-                work_dir=PROJECT_DIR / "results" / kite / "identification" / fidelity / "geometry",
-                system_config_path=system_path, fem_geometry_filename=spec["fem_geometry"],
-            )
-        else:
-            case = driver.build_case(
-                config, kite_name=kite, project_dir=PROJECT_DIR, system_config_path=system_path,
-                struc_geometry_path=(
-                    kite_dir / spec["struc_geometry"] if spec.get("struc_geometry") else None
-                ),
-            )
+        # the wireframe reduced from the full FEM file (one structural file
+        # for both fidelities), its aero mesh the full geometry's (billowed
+        # when aerodynamic.billowing.contraction > 0)
+        case = driver.build_case_reduced_fem(
+            config=config, kite_name=kite, project_dir=PROJECT_DIR,
+            work_dir=PROJECT_DIR / "results" / kite / "identification" / fidelity / "geometry",
+            system_config_path=system_path,
+            fem_geometry_filename=spec.get("fem_geometry", DEFAULT_STRUC_GEOMETRY_FILENAME),
+        )
     return driver, case
 
 

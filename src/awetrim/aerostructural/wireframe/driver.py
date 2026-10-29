@@ -29,6 +29,7 @@ from awetrim.aerostructural.case import (
     build_system_model,
     build_tether,
     DEFAULT_KITE_NAME,
+    DEFAULT_STRUC_GEOMETRY_FILENAME,
     resolve_initial_geometry_rotation_kwargs,
     resolve_kite_paths,
 )
@@ -396,18 +397,34 @@ def build_case(
 ) -> WireframeCase:
     """Load the kite's files and build the VSM body and the tether, once.
 
+    ``struc_geometry_path`` is a PSM-format wireframe (e.g. a deformed
+    snapshot). Without it the wireframe is reduced from the kite's full FEM
+    geometry (:func:`build_case_reduced_fem`, which takes ``config_overrides``
+    key by key and ``system.yaml`` as the default system file).
+
     ``config`` defaults to the kite's ``as_config.yaml``; ``config_overrides``
     is merged over it at the TOP level only (a nested block replaces the
     file's whole block -- pass a complete ``config`` for nested changes).
-    ``system_config_path`` defaults to ``system_flown_2019.yaml``,
-    ``struc_geometry_path`` to the kite's PSM geometry. ``tether_diameter``
-    overrides the system file's.
+    ``system_config_path`` defaults to ``system_flown_2019.yaml``.
+    ``tether_diameter`` overrides the system file's.
     """
+    if struc_geometry_path is None:
+        if structural_to_aero is not None or n_panels_aero is not None or panel_bays is not None:
+            raise ValueError(
+                "structural_to_aero / n_panels_aero / panel_bays need a struc_geometry_path; "
+                "the FEM reduction sets its own"
+            )
+        return build_case_reduced_fem(
+            config_overrides,
+            config=config,
+            kite_name=kite_name,
+            project_dir=project_dir,
+            system_config_path=system_config_path,
+            tether_diameter=tether_diameter,
+        )
     project_dir = Path(project_dir) if project_dir is not None else REPO_ROOT
-    config_path, aero_geometry_path, default_struc_geometry_path = resolve_kite_paths(
-        project_dir, kite_name
-    )
-    struc_geometry_path = Path(struc_geometry_path or default_struc_geometry_path)
+    config_path, aero_geometry_path, _ = resolve_kite_paths(project_dir, kite_name)
+    struc_geometry_path = Path(struc_geometry_path)
 
     # Load and validate the awesIO system config (single source of truth for physical params)
     # ``system_config_path`` lets a caller drive the deformation with a variant
@@ -750,8 +767,9 @@ def solve_deformation(
     ``angle_course_deg``, ``speed_radial``, ``distance_radial``,
     ``wind_speed_wind_ref``) and ``is_save_geometry_snapshots``.
 
-    ``struc_geometry_path`` overrides the kite's default PSM geometry (e.g.
-    the reduction :func:`solve_deformation_reduced_fem` writes).
+    ``struc_geometry_path`` is a PSM-format wireframe (e.g. the reduction
+    :func:`solve_deformation_reduced_fem` writes); without it this IS
+    :func:`solve_deformation_reduced_fem` on the kite's full FEM geometry.
     ``structural_to_aero`` (a ``SkinStructuralToAeroMapper``) and
     ``n_panels_aero`` fly an aerodynamic mesh other than the ribs' own.
 
@@ -762,6 +780,21 @@ def solve_deformation(
     Returns a dict with the results directory, the deformed nodes, the solver
     tracking data/meta, and the pieces the caller needs for reporting.
     """
+    if struc_geometry_path is None:
+        if structural_to_aero is not None or n_panels_aero is not None or panel_bays is not None:
+            raise ValueError(
+                "structural_to_aero / n_panels_aero / panel_bays need a struc_geometry_path; "
+                "the FEM reduction sets its own"
+            )
+        return solve_deformation_reduced_fem(
+            config_overrides,
+            config=config,
+            kite_name=kite_name,
+            project_dir=project_dir,
+            results_dir=results_dir,
+            system_config_path=system_config_path,
+            tether_diameter=tether_diameter,
+        )
     case = build_case(
         config,
         config_overrides=config_overrides,
@@ -879,8 +912,9 @@ def build_case_reduced_fem(
     project_dir=None,
     work_dir=None,
     system_config_path=None,
-    fem_geometry_filename: str = "struc_geometry_FEM_full.yaml",
+    fem_geometry_filename: str = DEFAULT_STRUC_GEOMETRY_FILENAME,
     config: dict | None = None,
+    tether_diameter: float | None = None,
 ) -> WireframeCase:
     """The wireframe case REDUCED from the full FEM geometry, one input file.
 
@@ -914,7 +948,8 @@ def build_case_reduced_fem(
 
     ``config_overrides`` is merged key by key (nested dicts too) over the
     kite's ``as_config.yaml`` (or over ``config`` when given);
-    ``system_config_path`` defaults to the kite's ``system.yaml``.
+    ``system_config_path`` defaults to the kite's ``system.yaml``;
+    ``tether_diameter`` overrides the system file's.
     """
     from awetrim.aerostructural.billow.driver import merge_config
     from awetrim.aerostructural.billow.structural_billow import relax_bridle_nodes
@@ -1060,6 +1095,7 @@ def build_case_reduced_fem(
         kite_name=kite_name,
         project_dir=project_dir,
         system_config_path=system_config_path,
+        tether_diameter=tether_diameter,
         struc_geometry_path=reduced_path,
         structural_to_aero=skin,
         n_panels_aero=n_panels_aero,
@@ -1074,7 +1110,9 @@ def solve_deformation_reduced_fem(
     project_dir=None,
     results_dir=None,
     system_config_path=None,
-    fem_geometry_filename: str = "struc_geometry_FEM_full.yaml",
+    fem_geometry_filename: str = DEFAULT_STRUC_GEOMETRY_FILENAME,
+    config: dict | None = None,
+    tether_diameter: float | None = None,
 ) -> dict:
     """One wireframe case on the wireframe REDUCED from the full FEM geometry
     (:func:`build_case_reduced_fem`, the reduction written to
@@ -1082,14 +1120,17 @@ def solve_deformation_reduced_fem(
     :func:`solve_deformation`.
 
     ``config_overrides`` is merged key by key (nested dicts too) over the
-    kite's ``as_config.yaml``; ``system_config_path`` defaults to the kite's
-    ``system.yaml``.
+    kite's ``as_config.yaml`` (or over ``config`` when given);
+    ``system_config_path`` defaults to the kite's ``system.yaml``;
+    ``tether_diameter`` overrides the system file's.
     """
     from awetrim.aerostructural.billow.driver import merge_config
 
     project_dir = Path(project_dir) if project_dir is not None else REPO_ROOT
     config_path, _, _ = resolve_kite_paths(project_dir, kite_name)
-    config = merge_config(load_yaml(config_path), config_overrides)
+    config = merge_config(
+        config if config is not None else load_yaml(config_path), config_overrides
+    )
     results_dir = Path(
         results_dir
         or aerostructural_results_root(project_dir, kite_name)
@@ -1103,6 +1144,7 @@ def solve_deformation_reduced_fem(
         work_dir=results_dir,
         system_config_path=system_config_path,
         fem_geometry_filename=fem_geometry_filename,
+        tether_diameter=tether_diameter,
     )
     return solve_deformation(
         config=case.config,
@@ -1110,6 +1152,7 @@ def solve_deformation_reduced_fem(
         project_dir=project_dir,
         results_dir=results_dir,
         system_config_path=case.system_config_path,
+        tether_diameter=tether_diameter,
         struc_geometry_path=case.struc_geometry_path,
         structural_to_aero=case.structural_to_aero,
         n_panels_aero=len(case.body_aero.panels),

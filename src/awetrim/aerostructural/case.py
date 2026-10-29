@@ -20,9 +20,12 @@ from awetrim.system.system_model import SystemModel
 
 DEFAULT_KITE_NAME = "LEI-V3-KITE"
 
-# Default structural geometry for the PSM/PSS aerostructural simulations
-# (awetrim.aerostructural.wireframe.driver and the sweeps). See data/<kite>/README_struc_files.md.
-DEFAULT_STRUC_GEOMETRY_FILENAME = "struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml"
+# THE structural geometry of a kite: the full FEM file Billow's full model
+# reads and the wireframe is reduced from (wireframe.reduce_fem), so both
+# fidelities start from one input file. See data/<kite>/README_struc_files.md.
+DEFAULT_STRUC_GEOMETRY_FILENAME = "struc_geometry_FEM_full.yaml"
+# The name of a DEFORMED snapshot (a PSM-format wireframe) in a results folder.
+SNAPSHOT_STRUC_GEOMETRY_FILENAME = "struc_geometry.yaml"
 
 # Single source of truth for config defaults used across all aerostructural scripts.
 CONFIG_DEFAULTS: dict = {
@@ -81,7 +84,7 @@ def resolve_kite_paths(
 
     Returns:
         (config_path, aero_geometry_path, struc_geometry_path)
-        where struc_geometry_path is the default PSM structural geometry
+        where struc_geometry_path is the kite's full FEM geometry
         (DEFAULT_STRUC_GEOMETRY_FILENAME).
     """
     project_dir = Path(project_dir).resolve()

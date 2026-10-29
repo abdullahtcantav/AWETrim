@@ -48,6 +48,7 @@ from awetrim.aerostructural import aerodynamic_vsm
 from awetrim.aerostructural.billow import structural_billow
 from awetrim.aerostructural.case import (
     DEFAULT_KITE_NAME,
+    DEFAULT_STRUC_GEOMETRY_FILENAME,
     build_actuation_case_folder,
     build_system_model,
     build_tether,
@@ -70,9 +71,8 @@ from awetrim.aerostructural.utils import load_yaml, rotate_geometry
 from awetrim.utils.config_paths import REPO_ROOT
 
 #: Billow needs strut tubes, leading-edge tubes and an inflation pressure, so it
-#: reads the full geometry. The reduced PSM files are bridle-and-spring only
-#: and cannot feed beams or a canopy mesh.
-STRUC_GEOMETRY_FILENAME = "struc_geometry_FEM_full.yaml"
+#: reads the full geometry -- the kite's one structural file.
+STRUC_GEOMETRY_FILENAME = DEFAULT_STRUC_GEOMETRY_FILENAME
 
 #: Settings this driver applies over the kite's ``as_config.yaml`` before the
 #: caller's overrides.

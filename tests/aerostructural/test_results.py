@@ -209,12 +209,19 @@ def _round_trip(read, geometry, l0_at, bridle_at, power_at, steering_at):
     np.testing.assert_allclose(again, l0, rtol=0, atol=1e-7)
 
 
+def _wireframe():
+    """The LEI-V3 PSM-format wireframe: the reduction of the FEM geometry."""
+    from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
+
+    return reduce_fem_geometry(
+        yaml.safe_load((KITE_DIR / "struc_geometry_FEM_full.yaml").read_text(encoding="utf-8"))
+    )
+
+
 def test_wireframe_reader_reads_the_snapshot_tapes_back():
     from awetrim.aerostructural.wireframe import structural_geometry_io
 
-    geometry = yaml.safe_load(
-        (KITE_DIR / "struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml").read_text(encoding="utf-8")
-    )
+    geometry = _wireframe()
     _round_trip(structural_geometry_io.main, geometry, l0_at=10, bridle_at=8, power_at=4, steering_at=5)
 
 

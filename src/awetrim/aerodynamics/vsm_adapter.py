@@ -42,7 +42,9 @@ class VSMAeroModelAdapter:
     ----------
     config_folder:
         Path to the kite data folder containing ``system.yaml``,
-        ``aero_geometry.yaml``, and optionally ``struc_geometry.yaml``.
+        ``aero_geometry.yaml``, and optionally a structural geometry
+        (``awetrim.aerostructural.case.find_struc_geometry``: the kite's FEM
+        file, or a results folder's deformed snapshot) for the bridle.
     n_panels:
         Number of VSM panels per half-span.
     center_of_gravity:
@@ -86,7 +88,9 @@ class VSMAeroModelAdapter:
         self.spanwise_panel_distribution = spanwise_panel_distribution
 
         self.aero_geometry_path = self.config_folder / "aero_geometry.yaml"
-        self.struc_geometry_path = self.config_folder / "struc_geometry.yaml"
+        from awetrim.aerostructural.case import find_struc_geometry
+
+        self.struc_geometry_path = find_struc_geometry(self.config_folder)
 
         # Read mass from system.yaml via factory
         from awetrim.system.factory import create_system_model_from_yaml
@@ -209,7 +213,7 @@ class VSMAeroModelAdapter:
         try:
             bridle = (
                 str(self.struc_geometry_path)
-                if self.struc_geometry_path.exists()
+                if self.struc_geometry_path is not None
                 else None
             )
             body = BodyAerodynamics.instantiate(

@@ -131,8 +131,8 @@ aerodynamic_bridle:
   cd_cable: !!float 1.1
   cf_cable: !!float 0.01
   # How the unknown roll angle of a FLAT TAPE about its own axis is
-  # treated (steering/depower tapes; lines with a "w" column in
-  # struc_geometry.yaml). averaged = uniform-roll mean of the broadside
+  # treated (steering/depower tapes; lines with a "w" column in the
+  # structural geometry). averaged = uniform-roll mean of the broadside
   # and edge-on limits; broadside|edge_on = that bracket; round =
   # pre-2026-08-21 behaviour, the area-equivalent circle.
   # See awetrim.aerodynamics.line_drag.

@@ -175,7 +175,10 @@ def solver_results():
     base_config["is_with_aero_bridle"] = True
     base_config["is_with_aero_tether"] = True
 
-    struc_geometry = load_yaml(struc_geometry_path)
+    # the PSM-format wireframe reduced from the kite's FEM geometry
+    from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
+
+    struc_geometry = reduce_fem_geometry(load_yaml(struc_geometry_path))
 
     (
         struc_nodes_base,

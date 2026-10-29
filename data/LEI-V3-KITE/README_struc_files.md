@@ -1,51 +1,41 @@
-# Notes to URI
+# LEI-V3 structural geometry
 
-### Struc Geometry file
-- **Default for PSM simulations:** `struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml`. The PSM/PSS aerostructural scripts (`run_simulation_level_qsm.py` and the sweeps, via `resolve_kite_paths` / `DEFAULT_STRUC_GEOMETRY_FILENAME` in `examples/2_aerostructural/common.py`) use this file by default. Don't bother with the non-adjusted version.
-- for a semi-complete account of how this was obtained, read the parent directory.
+`struc_geometry_FEM_full.yaml` is the kite's ONE structural geometry. Both
+structural fidelities start from it:
 
-### 2019 powered and depowered state
-- 2019 powered and depowered state estimations are VERY APPROXIMATE and most definitely wrong    -> 
+- **Billow full** (`awetrim.aerostructural.billow.driver`) reads it as it is:
+  inflatable strut and leading-edge tubes, the membrane canopy between them
+  (28 sections), the inflation pressure, and the complete bridle down to the
+  individual a/b/c/d lines that fan onto each strut.
+- **Wireframe** (`awetrim.aerostructural.wireframe.driver`) reduces it on the
+  fly (`wireframe.reduce_fem.reduce_fem_geometry`). The reduction has one rib
+  per strut with two wing nodes, where the front and rear bridle attach, and
+  each per-strut line fan collapsed to one equivalent line. It flies the full
+  geometry's aerodynamic mesh. The reduction is written next to each case as
+  `struc_geometry_wireframe.yaml`.
 
-- From EKF-AWE obtain: 22deg powered and 26deg power signal
+`awetrim.aerostructural.case.DEFAULT_STRUC_GEOMETRY_FILENAME` names the file.
+The step-1 aerodynamics (bridle drag, mass and inertia) read it too.
 
-Convert using the same procedure as described below, but adjust for min_signal = 21.4deg and max_signal = 26.92deg
-```
-The 2019 value of $u_{\mathrm{dp}}$ was obtained by transforming the reported depower signal in degrees\footnote{\label{fn:udp_2019} The 2019 dataset reported a depower signal $x^{2019}$ in degrees~\citep{Oehler2019}, which was normalised using the campaign bounds $x_{\min}=0.02~\unit{\degree}$ and $x_{\max}=22.68~\unit{\degree}$ to obtain $u_{\mathrm{p}}^{2019}$, and then converted to the 2025 convention by equating physical tape lengths. The 2019 kinematic depower-tape relation $l_{\mathrm{dp}}=1.098+0.384\left(1-u^{2019}_{\mathrm{p}}\right)$~\citep{Poland2023} was combined with the 2025 linear calibration $l_{\mathrm{dp}}=0.2+5u_{\mathrm{dp}}$ to yield $u_{\mathrm{dp}}=0.2564-0.0768u_{\mathrm{p}}^{2019}$. This conversion assumes that the underlying tape-length-to-depower mapping remained consistent between campaigns.} 
-into the 2025 representation $u_{\mathrm{dp}}$. 
-This conversion makes it possible to express a $u_{\mathrm{dp}}$ number in the 2025 linear calibration mapping, but should not be considered absolute as it depends on the assumed tape-length relation and on the unknown 2019 bridle-line geometry.
-```
+A deformed results folder holds a snapshot of the solved shape as
+`struc_geometry.yaml`. The snapshot is a PSM-format wireframe, and
+`case.find_struc_geometry` picks it up there.
 
-We then find:
-- ldp_2019_power = 1.14
-- ldp_depower = 1.42
+## Removed geometries
 
-Which converted to udp 2025 non-linear relation:
-```
-\begin{equation}
-    l_{\mathrm{dp},2025}
-    =
-    -1.724u_{\mathrm{dp}}^2
-    +6.624u_{\mathrm{dp}}
-    +0.192 .
-    \label{eq:dp_relation_2025}
-\end{equation}
-```
-gives:
-udp_power = 0.146
-udp_depower = 0.190
+The PSM wireframe files were removed on 2026-10-29:
 
-- dynamic aero-structural coupled steady circular flight simulations suggest that Gk will match with udp_powered ~ 0.23/24
+- `struc_geometry.yaml`
+- `struc_geometry_PSM_reduced.yaml`
+- `struc_geometry_PSM_reduced_photogrammetry_adjusted.yaml`
 
-- **Default powered (2019): $u_{\mathrm{dp}} = 0.24$, $l_{\mathrm{dp}} = 1.7$**
-- **Default depowered (2019): $u_{\mathrm{dp}} = 0.284$, $l_{\mathrm{dp}} = 1.98$**
+They are in git history and in the v0.1.0 release. They reproduce the
+wes-quasi-steady paper, whose model they are: the wing nodes sit at the bridle
+attachments (a short chord, 17.2 m2 projected), and the trailing-edge rest
+lengths were cut by hand to match the photogrammetry. The current
+identification replaces those hand corrections with physical ones (canopy
+billowing, the full chord and the strut-lever load transfer). See
+`docs/aerostructural/lei_v3_wing_corrections.md`.
 
-
-## 2025 powered values
-
-- Torque2026 paper is outdated, reasoning from dissertation simulation insights we find
-- quasi-steady aero-structural coupled symmetric simulations give a force-match using -> udp_powered ~ 0.23/0.24 
-- quasi-steady aero-structural coupled steady circular flight simulations suggest that Gk will match with udp_powered ~ 0.21/0.22
-- dynamic aero-structural coupled steady circular flight simulations suggest that Gk will match with udp_powered ~ 0.21
-
-- **Default (2025): $u_{\mathrm{dp}} = 0.22$**
+The tape lengths that match the 2019 flight are in `identification.yaml`
+(`fit.fidelities.wireframe.flight_match`).

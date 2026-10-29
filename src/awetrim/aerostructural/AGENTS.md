@@ -205,7 +205,13 @@ src/awetrim/aerostructural/
                                    loop, sim_output.h5 + snapshot + case.json).
                                    Was in examples/2_aerostructural/
                                    run_simulation_PSM.py until 2026-10-07.
-                                   solve_deformation_reduced_fem: the same on
+                                   build_case / solve_deformation take a
+                                   PSM-format struc_geometry_path (a deformed
+                                   snapshot); WITHOUT one they are
+                                   build_case_reduced_fem /
+                                   solve_deformation_reduced_fem (the kite's
+                                   only geometry is the FEM file since
+                                   2026-10-29). solve_deformation_reduced_fem: the same on
                                    the wireframe REDUCED from
                                    struc_geometry_FEM_full.yaml, flying the full
                                    geometry's aero mesh -- the public demo, so
@@ -251,7 +257,7 @@ src/awetrim/aerostructural/
                                    (rest = built distance); a line into a bare
                                    pulley sheave is absorbed into the pulley
                                    (l0 + 2L). Reproduces
-                                   struc_geometry_PSM_reduced.yaml's topology and
+                                   the removed struc_geometry_PSM_reduced.yaml's topology and
                                    fixed lengths (tests/aerostructural/
                                    test_reduce_fem.py; that file's knots sit
                                    0.2-0.45 m elsewhere, so its *_equiv lengths
@@ -296,7 +302,7 @@ examples/2_aerostructural/            The PUBLIC demonstrator: keep it to these
   run_simulation_PSM.py            One wireframe case; an Inputs block (kite,
                                    elevation, azimuth, course, tether length,
                                    reel speed, wind, gravity, tapes) over
-                                   wireframe.driver.solve_deformation
+                                   wireframe.driver.solve_deformation_reduced_fem
   run_simulation_BILLOW.py         The same for billow.driver.solve_deformation
   plot_simulation.py               Trim table + kite_view.html (3-D viewer,
                                    kite_viewer_template.html) of one case
@@ -345,7 +351,9 @@ that path carry the defect.
 ## Core Data Flow
 
 ```
-struc_geometry.yaml
+struc_geometry_FEM_full.yaml
+  └─ wireframe/reduce_fem.reduce_fem_geometry() → PSM-format wireframe
+       (or a deformed snapshot, struc_geometry.yaml)
   └─ wireframe/structural_geometry_io.main() → StructuralGeometry (nodes, connectivity, rest_lengths, …)
 
 aero_geometry.yaml

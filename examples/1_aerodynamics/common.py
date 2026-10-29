@@ -41,7 +41,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config-folder",
         default=str(DEFAULT_CONFIG_FOLDER),
-        help="Config folder containing system.yaml, aero_geometry.yaml, and optional struc_geometry.yaml (default: data/LEI-V3-KITE).",
+        help="Config folder containing system.yaml, aero_geometry.yaml, and optional struc_geometry_FEM_full.yaml (default: data/LEI-V3-KITE).",
     )
     parser.add_argument(
         "--no-struc-geometry",
@@ -234,16 +234,17 @@ def load_config_from_folder(
     Expected files:
     - system.yaml        (or system.yml) — contains physical properties (mass, inertia, CoG)
     - aero_geometry.yaml — VSM aerodynamic geometry (profiles, wing sections)
-    - struc_geometry.yaml (optional) — structural geometry (LE/TE nodes, bridles)
+    - struc_geometry_FEM_full.yaml (optional) — structural geometry (bridles, node
+      masses); in a deformed results dir its snapshot, struc_geometry.yaml
 
     Property source selection:
-    - If struc_geometry.yaml EXISTS: aggregate (wing+bridle+KCU) mass/CG/inertia is
+    - If a structural geometry EXISTS: aggregate (wing+bridle+KCU) mass/CG/inertia is
       derived from the structural node distribution via
       ``awetrim.aerostructural.utils.compute_kite_aggregate``.
-    - If struc_geometry.yaml NOT FOUND: read wing-only properties from
+    - If NOT FOUND: read wing-only properties from
       ``components.kites[0].wing.structure``.
 
-    If ``deformed_from`` is given, aero_geometry.yaml and struc_geometry.yaml are
+    If ``deformed_from`` is given, aero_geometry.yaml and the structural geometry are
     read from that directory instead (e.g. an aerostructural results case dir).
     system.yaml is still read from ``config_folder`` -- mass/inertia/CoG are
     NOT recomputed from the deformed geometry.
@@ -254,10 +255,11 @@ def load_config_from_folder(
     - 'inertia': inertia tensor from system.yaml (kite if struc exists, wing structure else)
     - 'center_of_mass': CoG from system.yaml (kite if struc exists, wing structure else)
     - 'aero_geometry_path': path to aero_geometry.yaml
-    - 'struc_geometry_path': path to struc_geometry.yaml (or None if not found)
+    - 'struc_geometry_path': path to the structural geometry (or None if not found)
     """
     import yaml
 
+    from awetrim.aerostructural.case import find_struc_geometry
     from awetrim.aerostructural.utils import compute_kite_aggregate
     from awetrim.utils.system_config import get_kite
 
@@ -288,10 +290,9 @@ def load_config_from_folder(
     with open(aero_geometry_path, "r") as f:
         aero_config = yaml.safe_load(f)
 
-    # Optional structural geometry file (also from the geometry folder).
-    struc_geometry_path = geom_folder / "struc_geometry.yaml"
-    if not use_struc_geometry or not struc_geometry_path.exists():
-        struc_geometry_path = None
+    # Optional structural geometry (also from the geometry folder): the kite's
+    # FEM file, or a deformed snapshot when ``deformed_from`` is a results dir.
+    struc_geometry_path = find_struc_geometry(geom_folder) if use_struc_geometry else None
 
     # Select property source based on whether struc_geometry exists.
     kite_node = get_kite(system_config)
