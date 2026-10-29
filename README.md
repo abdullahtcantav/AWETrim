@@ -130,6 +130,18 @@ The distributed-mass tether model (`WilliamsTether`) follows Williams, P. (2017)
 
 ---
 
+## Acknowledgements
+
+<p>
+  <a href="https://meridional.eu/"><img src="docs/img/Meridional_logo.png" alt="MERIDIONAL project logo" height="38"></a>
+  &nbsp;&nbsp;
+  <img src="docs/img/eu-funded.svg" alt="Funded by the European Union" height="38">
+</p>
+
+AWETrim is developed within the [MERIDIONAL](https://meridional.eu/) project, which has received funding from the European Union's Horizon Europe research and innovation programme under Grant Agreement No. 101084216. Views and opinions expressed are those of the author(s) only and do not necessarily reflect those of the European Union. Neither the European Union nor the granting authority can be held responsible for them.
+
+---
+
 ## License
 
 Technische Universiteit Delft hereby disclaims all copyright interest in the program “AWETrim” (a Python library for the design and optimisation of soft-kite Airborne Wind Energy Systems) written by the Author(s).
