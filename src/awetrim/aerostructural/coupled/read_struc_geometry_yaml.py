@@ -18,7 +18,7 @@ import numpy as np
 import logging
 
 from awetrim.aerostructural.utils import bridle_connection_rest_lengths
-from awetrim.utils.system_config import get_kite
+from awetrim.utils.system_config import get_kcu_mass
 from awetrim.aerostructural.symmetry import warn_if_asymmetric
 
 
@@ -26,17 +26,16 @@ def _resolve_kcu_mass(struc_geometry, config=None, system_config=None):
     """Resolve KCU mass.
 
     Single source of truth is the system config
-    (``components.kites[0].control_system.structure.mass``, resolved via
-    ``get_kite``). ``struc_geometry`` must NOT carry a ``kcu_mass`` — it is only
-    honoured as a deprecated fallback.
+    (``components.kites[0].control_system.structure.mass`` plus the onboard
+    turbine's mass, resolved via ``get_kcu_mass``). ``struc_geometry`` must NOT
+    carry a ``kcu_mass`` — it is only honoured as a deprecated fallback.
 
     Priority: system_config -> config (per-run override) -> struc_geometry.
     """
     if isinstance(system_config, dict):
-        kite = get_kite(system_config)
-        cs_struct = kite.get("control_system", {}).get("structure", {})
-        if "mass" in cs_struct:
-            return float(cs_struct["mass"])
+        mass_kcu = get_kcu_mass(system_config)
+        if mass_kcu is not None:
+            return mass_kcu
 
     if isinstance(config, dict):
         kcu_cfg = config.get("kcu", {})

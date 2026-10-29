@@ -19,13 +19,20 @@ from typing import Union
 
 import yaml
 
+from awetrim.aerodynamics.kcu_drag import CT_TURBINE_OPERATING
 from awetrim.environment.Wind import Wind
 from awetrim.environment.profile_laws import DEFAULT_POWER_LAW_ALPHA
 from awetrim.system.kite import Kite
 from awetrim.system.system_model import SystemModel
 from awetrim.system.tether import RigidLumpedTether
 from awetrim.system.williams_tether import WilliamsTether
-from awetrim.utils.system_config import get_drum, get_kite, get_tether
+from awetrim.utils.system_config import (
+    get_drum,
+    get_kcu_mass,
+    get_kite,
+    get_tether,
+    get_turbine,
+)
 
 
 def create_tether_from_config(
@@ -310,7 +317,8 @@ def _extract_params_awesio(cfg: dict) -> tuple:
     bridle_struct = (kite.get("bridle") or {}).get("structure", {}) or {}
     mass_wing = wing_struct.get("mass", 20.0) + float(bridle_struct.get("mass", 0.0) or 0.0)
     area_wing = wing_struct.get("projected_surface_area", 20.0)
-    mass_kcu = cs_struct.get("mass", 0.0)
+    # KCU body plus its onboard turbine (separate masses in awesIO).
+    mass_kcu = get_kcu_mass(cfg) or 0.0
     # KCU envelope, used for its bluff-body drag (awetrim.aerodynamics.
     # kcu_drag). Absent in older/partial system files -> 0.0, which the
     # drag model reads as 'no KCU drag' rather than failing.
@@ -498,29 +506,26 @@ def create_system_model_from_yaml(
         f"  tether model: {type(tether).__name__} "
         f"(diameter={tether_diameter}, density={tether_density})"
     )
-    # Onboard-turbine DRAG envelope (mass already in the KCU mass): the
-    # optional ``control_system.turbine`` block of an awesIO system.yaml.
-    # Absent -> zeros -> the KCU drag model adds no turbine term.
-    turbine_cfg = (
-        (get_kite(cfg).get("control_system", {}) or {}).get("turbine", {}) or {}
-        if "components" in cfg
-        else {}
-    )
-    if turbine_cfg:
+    # Onboard-turbine DRAG envelope (its mass is lumped into mass_kcu by
+    # get_kcu_mass): the optional awesIO ``control_system.turbine`` block.
+    # Absent -> zero diameter -> the KCU drag model adds no turbine term.
+    # The thrust coefficient is aerodynamic, not hardware, so it is the
+    # model's operating value (kcu_drag.CT_TURBINE_OPERATING).
+    turbine_struct = get_turbine(cfg) if "components" in cfg else {}
+    diameter_turbine = float(turbine_struct.get("rotor_diameter", 0.0) or 0.0)
+    if turbine_struct:
         print(
-            "  KCU turbine: rotor diameter="
-            f"{turbine_cfg.get('diameter', 0.0)} m, C_T="
-            f"{turbine_cfg.get('thrust_coefficient', 0.85)} (top-mounted)"
+            f"  KCU turbine: rotor diameter={diameter_turbine} m, "
+            f"mass={turbine_struct.get('mass', 0.0)} kg (in mass_kcu), "
+            f"hub position_KA={turbine_struct.get('position_KA')} m"
         )
     kite = Kite(
         mass_wing=mass_wing,
         mass_kcu=mass_kcu,
         length_kcu=length_kcu,
         diameter_kcu=diameter_kcu,
-        diameter_turbine=float(turbine_cfg.get("diameter", 0.0) or 0.0),
-        thrust_coefficient_turbine=float(
-            turbine_cfg.get("thrust_coefficient", 0.85) or 0.0
-        ),
+        diameter_turbine=diameter_turbine,
+        thrust_coefficient_turbine=CT_TURBINE_OPERATING,
         area_wing=area_wing,
         aero_input=aero_cfg,
         steering_control=steering_control,

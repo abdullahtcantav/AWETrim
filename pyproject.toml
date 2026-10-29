@@ -59,7 +59,7 @@ dependencies = [
   # EKF-AWE: the shared KCU drag model (awetrim.aerodynamics.kcu_drag). Its flight
   # reconstructions are read by awetrim.flight_data, not produced here.
   "awes-ekf @ git+https://github.com/awegroup/EKF-AWE.git@33fc63515bca432d6e01f0386ce4d306c7a5ace1",
-  "awesIO @ git+https://github.com/awegroup/awesIO.git@d454992301e1790e069ff850eabf65526545d33c",
+  "awesIO @ git+https://github.com/awegroup/awesIO.git@5799a2dbd3e74c83914dae342aa6d9a43b2180e1",
 ]
 
 [project.optional-dependencies]

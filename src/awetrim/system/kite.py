@@ -444,8 +444,8 @@ class Kite(Wing):
         self.diameter_kcu = float(diameter_kcu or 0.0)
         # Onboard wind turbine (mounted ON TOP of the KCU, facing the
         # apparent wind); only the KCU drag model reads these. 0.0 diameter =
-        # no turbine, and its mass is already inside mass_kcu -- these are
-        # DRAG parameters only.
+        # no turbine, and its mass is already inside mass_kcu (the factory's
+        # get_kcu_mass adds it) -- these are DRAG parameters only.
         self.diameter_turbine = float(diameter_turbine or 0.0)
         self.thrust_coefficient_turbine = float(thrust_coefficient_turbine or 0.0)
         # Explicit KCU bluff-body drag (awetrim.aerodynamics.kcu_drag, the

@@ -22,6 +22,7 @@ from awetrim.identification.rigid_body_axes import (
     load_psm_nodes_and_masses,
     wing_le_te_indices,
 )
+from awetrim.utils.system_config import get_kcu_mass
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 KITE_DIR = PROJECT_ROOT / "data" / "LEI-V3-KITE"
@@ -290,9 +291,7 @@ def test_loaded_masses_carry_the_kcu_and_the_bridle(kite_files):
     struc, system = kite_files
     struc_geometry = yaml.safe_load(struc.read_text(encoding="utf-8"))
     system_config = yaml.safe_load(system.read_text(encoding="utf-8"))
-    kcu_mass = float(
-        system_config["components"]["kites"][0]["control_system"]["structure"]["mass"]
-    )
+    kcu_mass = get_kcu_mass(system_config)
 
     _, masses, _, _ = load_psm_geometry(struc)
     mass_col = struc_geometry["wing_elements"]["headers"].index("m")

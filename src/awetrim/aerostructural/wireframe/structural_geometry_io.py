@@ -20,7 +20,7 @@ import numpy as np
 import logging
 
 from ..utils import bridle_connection_rest_lengths, calculate_cg, calculate_inertia
-from awetrim.utils.system_config import get_kite
+from awetrim.utils.system_config import get_kcu_mass
 from awetrim.aerostructural.symmetry import warn_if_asymmetric
 
 
@@ -173,28 +173,27 @@ def _resolve_kcu_mass(struc_geometry, config=None, system_config=None):
     """Resolve KCU mass.
 
     The single source of truth is the system config
-    (``components.kites[0].control_system.structure.mass``, resolved via
-    ``get_kite``). ``struc_geometry`` must NOT carry a ``kcu_mass`` — it is only
-    honoured as a deprecated fallback.
+    (``components.kites[0].control_system.structure.mass`` plus the onboard
+    turbine's mass, resolved via ``get_kcu_mass``). ``struc_geometry`` must NOT
+    carry a ``kcu_mass`` — it is only honoured as a deprecated fallback.
 
     Priority:
-      1. system_config (awesIO): control_system.structure.mass
+      1. system_config (awesIO): control_system.structure.mass + turbine mass
       2. config (aerostructural YAML): kcu.mass or kcu_mass (per-run override)
       3. struc_geometry.kcu_mass (deprecated fallback; emits a warning)
     """
     if isinstance(system_config, dict):
-        kite = get_kite(system_config)
-        cs_struct = kite.get("control_system", {}).get("structure", {})
-        if "mass" in cs_struct:
+        mass_kcu = get_kcu_mass(system_config)
+        if mass_kcu is not None:
             if "kcu_mass" in struc_geometry:
                 logging.warning(
                     "KCU mass defined in both system_config (%.4f kg) and "
                     "struc_geometry (%.4f kg); using system_config and ignoring "
                     "struc_geometry. Remove kcu_mass from the structural geometry.",
-                    float(cs_struct["mass"]),
+                    mass_kcu,
                     float(struc_geometry["kcu_mass"]),
                 )
-            return float(cs_struct["mass"])
+            return mass_kcu
 
     if isinstance(config, dict):
         kcu_cfg = config.get("kcu", {})

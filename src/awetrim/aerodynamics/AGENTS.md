@@ -228,9 +228,14 @@ apparent wind (axis ⊥ the KCU/tether axis), so `from_dimensions`/
 `from_system_model` add the thrust area to the BROADSIDE (crossflow) slot only
 — the along-tether flow is shadowed by the KCU body, so the axial slot is
 untouched. Parameters ride on the kite as
-`diameter_turbine`/`thrust_coefficient_turbine`, read by `system/factory.py`
-from the optional `control_system.turbine` yaml block (absent = zeros = no
-turbine term; turbine MASS stays inside the KCU mass).
+`diameter_turbine`/`thrust_coefficient_turbine`: `system/factory.py` reads
+the rotor diameter from the optional awesIO `control_system.turbine.structure`
+block (`rotor_diameter`, `mass`, `position_KA`; absent = no turbine term) and
+always uses `CT_TURBINE_OPERATING`, since C_T is aerodynamic and not part of
+the hardware file. The turbine MASS is its own in the file;
+`utils.system_config.get_kcu_mass` adds it to the KCU body mass, and every
+KCU-mass reader goes through that function. `position_KA` (hub, origin at the
+KCU, -z = hanging) is not used: the turbine is lumped at the KCU.
 
 `line_drag.py` owns the **section** drag of bridle lines: the round-cable
 coefficient the crossflow law has always used, and the flat-tape model added

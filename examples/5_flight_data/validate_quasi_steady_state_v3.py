@@ -30,7 +30,7 @@ import yaml
 
 # Validation reproduces a specific flight, so use the as-flown KCU mass.
 from awetrim.utils.config_paths import LEI_V3_DATA_DIR, LEI_V3_SYSTEM_FLOWN_CONFIG
-from awetrim.utils.system_config import get_kite, get_tether
+from awetrim.utils.system_config import get_tether
 
 RUN_WILLIAMS = False
 RUN_RIGID = True
@@ -256,14 +256,9 @@ all_solutions = {}
 for cfg, label in zip(aero_cfgs, aero_labels):
     print(f"\nRunning simulation with {label} aerodynamic model...")
 
-    kite = get_kite(cfg)
-    wing_struct = kite["wing"]["structure"]
-    cs_struct = kite.get("control_system", {}).get("structure", {})
+    # Masses, area and KCU hardware come from the factory below
+    # (get_kcu_mass adds the onboard turbine); only the tether is read here.
     tether_struct = get_tether(cfg).get("structure", {})
-
-    mass_wing = wing_struct.get("mass", 14)
-    area_wing = wing_struct.get("projected_surface_area", 20)
-    mass_kcu = cs_struct.get("mass", 0.0)
     tether_diameter = tether_struct.get("diameter", 0.01)
 
     if label == "Williams":
