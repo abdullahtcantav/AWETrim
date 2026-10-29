@@ -411,7 +411,7 @@ External dependencies referenced by `pyproject.toml` (VCS installs):
 | Package | Role | Install note |
 |---------|------|-------------|
 | `Vortex-Step-Method` | VSM aerodynamic solver | Installed from GitHub, **pinned to develop `1201f6f`** in `pyproject.toml` (https://github.com/awegroup/Vortex-Step-Method; was `8825a12` until 2026-10-28). `aerodynamics/panel_kernels.py` / `trim_casadi.py` mirror its panel force law (drag along the local inner flow, attached-trailed vortex force) and its CasADi panel function; move the pin only together with them (`tests/aerodynamics/test_panel_kernels.py`). Every VSM object is built on AWETrim's own settings (`aerodynamics/vsm_settings.py`), never VSM's defaults. An editable local VSM checkout on another branch silently overrides the pin |
-| `billow` | Minimum-energy structural solver, both fidelities | Installed from GitHub `@main` via `pyproject.toml` (https://github.com/awegroup/Billow). For local development: `pip install -e ../Billow` |
+| `billow` | Minimum-energy structural solver, both fidelities | Installed from GitHub, pinned to a commit in `pyproject.toml` (https://github.com/awegroup/Billow; move the pin deliberately). For local development: `pip install -e ../Billow` |
 | `awes-ekf` | Extended Kalman Filter for flight data | Installed from GitHub; repository used here: https://github.com/ocayon/EKF-AWE |
 | `awesIO` | IO helpers used by scripts | Installed from GitHub (https://github.com/awegroup/awesIO) |
 | `CasADi` | Symbolic computation in `system/` | Required; used heavily in `src/awetrim/system/` |

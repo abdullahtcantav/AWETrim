@@ -48,8 +48,8 @@ dependencies = [
   "scipy",
   "PyYAML",
   "prompt_toolkit",
-  "vplot3d @ git+https://github.com/rschmehl/vplot3d.git@main",
-  "billow @ git+https://github.com/awegroup/Billow.git@main",
+  "vplot3d @ git+https://github.com/rschmehl/vplot3d.git@c5efdc8ffb96832eaaf3f7d7749cac923c2516f7",
+  "billow @ git+https://github.com/awegroup/Billow.git@ec6fb79e0a0af8706eda325f309154fd24fa7aae",
   # Pinned: aerodynamics/panel_kernels.py and trim_casadi.py mirror VSM's
   # panel force law and its CasADi panel function, so a VSM change there
   # breaks the CasADi trim. 1201f6f = VSM develop with the curved
