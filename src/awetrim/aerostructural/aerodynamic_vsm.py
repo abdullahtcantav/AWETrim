@@ -37,8 +37,9 @@ from awetrim.aerodynamics.vsm_settings import (
 from VSM.plot_geometry_matplotlib import plot_geometry
 from awetrim.aerodynamics.kcu_drag import KcuDragModel
 from awetrim.aerostructural.case import air_density_at_case
+from awetrim.aerostructural.coupled.awesio_structure import load_structure
 from awetrim.aerodynamics.line_drag import (
-    apply_bridle_drag_diameters,
+    attach_bridle_lines,
     bridle_drag_diameters,
     settings_from_config,
 )
@@ -496,7 +497,9 @@ def initialize(
         aero_geometry_path: Path to aerodynamic geometry file.
         config (dict): Main ASKITE configuration dictionary.
         n_panels_aero (int): Number of aerodynamic panels.
-        bridle_path: Optional structural geometry path used by VSM to build bridle lines.
+        bridle_path: Optional structure file (awesIO ``structure.yml``; a
+            retired-format file is converted by ``load_structure``), or a
+            loaded :class:`Structure`, whose bridle lines the body carries.
 
     Returns:
         tuple: (body_aero, vsm_solver, vel_app, initial_polar_data)
@@ -507,22 +510,17 @@ def initialize(
         spanwise_panel_distribution=config["aerodynamic"][
             "spanwise_panel_distribution"
         ],
-        bridle_path=bridle_path,
         **vsm_body_kwargs(),
     )
-    # The bridle-line drag law reads one diameter per segment, and the
-    # structural table stores flat tapes as an AREA-equivalent circle --
-    # right for mass/EA, meaningless for drag. Swap in the drag-equivalent
-    # diameters before anything solves (awetrim.aerodynamics.line_drag).
+    # The bridle lines come from the structure (VSM's own bridle_path parse
+    # reads only the retired format). The drag law reads one diameter per
+    # segment, and the structure stores flat tapes as an AREA-equivalent
+    # circle -- right for mass/EA, meaningless for drag -- so the
+    # drag-equivalent diameters go in before anything solves
+    # (awetrim.aerodynamics.line_drag).
     if bridle_path is not None:
-        import yaml as _yaml
-
-        with open(bridle_path, "r", encoding="utf-8") as f:
-            _struc_geometry = _yaml.safe_load(f)
         _roll_model, _cd_cable = settings_from_config(config)
-        _n = apply_bridle_drag_diameters(
-            body_aero, _struc_geometry, _roll_model, _cd_cable
-        )
+        _n = attach_bridle_lines(body_aero, bridle_path, _roll_model, _cd_cable)
         if _n:
             logging.info(
                 "flat-tape drag applied to %d bridle segments (roll model %r)",
@@ -622,35 +620,32 @@ def plot_vsm_geometry(body_aero):
     )
 
 
-def parse_bridle_line_specs(struc_geometry: dict, config: dict = None) -> list:
+def parse_bridle_line_specs(struc_geometry, config: dict = None) -> list:
     """``(node_i, node_j, diameter)`` rows of the VSM bridle-line system.
 
-    Replicates exactly the parse ``BodyAerodynamics.instantiate(bridle_path=...)``
-    performs (``bridle_connections`` rows against the ``bridle_lines`` table,
-    one extra segment for 3-node pulley rows), but keeps NODE INDICES instead
-    of baked-in coordinates -- so the segments can be rebuilt from the live
-    ``struc_nodes`` as the structure deforms. Node ids match the structural
-    array (0 = KCU/bridle point).
+    One row per ``Structure.bridle_segments`` entry, the line system
+    ``initialize`` gives the body (``Structure.bridle_line_system``), but with
+    NODE INDICES instead of baked-in coordinates -- so the segments can be
+    rebuilt from the live ``struc_nodes`` as the structure deforms. Node
+    indices are the structure's (``points`` row order; the KCU is
+    ``Structure.kcu``). ``struc_geometry`` is a :class:`Structure` or anything
+    ``load_structure`` accepts.
 
     The diameter is the DRAG-equivalent one, matching what ``initialize``
     put in the body: flat tapes carry their projected width, every other
     line its structural diameter (awetrim.aerodynamics.line_drag). Without
     ``config`` the module defaults apply.
     """
-    if "bridle_connections" not in struc_geometry or "bridle_lines" not in struc_geometry:
+    if not struc_geometry:
         return []
-    headers = struc_geometry["bridle_lines"]["headers"][1:]
-    lines = {
-        row[0]: dict(zip(headers, row[1:]))
-        for row in struc_geometry["bridle_lines"]["data"]
-    }
-    diameters = bridle_drag_diameters(struc_geometry, *settings_from_config(config))
-    specs = []
-    for row in struc_geometry["bridle_connections"]["data"]:
-        specs.append((int(row[1]), int(row[2]), diameters[len(specs)]))
-        if len(row) == 4:
-            specs.append((int(row[2]), int(row[3]), diameters[len(specs)]))
-    return specs
+    structure = load_structure(struc_geometry)
+    diameters = bridle_drag_diameters(structure, *settings_from_config(config))
+    return [
+        (structure.index[a], structure.index[b], diameter)
+        for (a, b), diameter in zip(
+            (s["points"] for s in structure.bridle_segments), diameters
+        )
+    ]
 
 
 def rebuild_bridle_line_system(body_aero, struc_nodes, bridle_line_specs) -> None:

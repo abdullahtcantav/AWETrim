@@ -20,12 +20,20 @@ from awetrim.system.system_model import SystemModel
 
 DEFAULT_KITE_NAME = "LEI-V3-KITE"
 
-# THE structural geometry of a kite: the full FEM file Billow's full model
-# reads and the wireframe is reduced from (wireframe.reduce_fem), so both
-# fidelities start from one input file. See data/<kite>/README_struc_files.md.
-DEFAULT_STRUC_GEOMETRY_FILENAME = "struc_geometry_FEM_full.yaml"
-# The name of a DEFORMED snapshot (a PSM-format wireframe) in a results folder.
-SNAPSHOT_STRUC_GEOMETRY_FILENAME = "struc_geometry.yaml"
+# THE structural geometry of a kite: an awesIO structure document
+# (structure_schema.yml, read with coupled.awesio_structure.load_structure)
+# that Billow's full model reads and the wireframe is reduced from
+# (wireframe.reduce_fem), so both fidelities start from one input file. A
+# deformed snapshot in a results folder has the same name. See
+# data/<kite>/README_struc_files.md.
+DEFAULT_STRUC_GEOMETRY_FILENAME = "structure.yml"
+SNAPSHOT_STRUC_GEOMETRY_FILENAME = DEFAULT_STRUC_GEOMETRY_FILENAME
+#: The retired AWETrim formats' names (a full FEM geometry; a PSM-format
+#: snapshot). find_struc_geometry still finds them, and load_structure
+#: converts them on the fly, so private kites and old results keep working.
+LEGACY_STRUC_GEOMETRY_FILENAMES = ("struc_geometry_FEM_full.yaml", "struc_geometry.yaml")
+#: The per-case wireframe reduction (wireframe.driver).
+WIREFRAME_STRUC_GEOMETRY_FILENAME = "structure_wireframe.yml"
 
 # Single source of truth for config defaults used across all aerostructural scripts.
 CONFIG_DEFAULTS: dict = {
@@ -84,7 +92,7 @@ def resolve_kite_paths(
 
     Returns:
         (config_path, aero_geometry_path, struc_geometry_path)
-        where struc_geometry_path is the kite's full FEM geometry
+        where struc_geometry_path is the kite's awesIO structure document
         (DEFAULT_STRUC_GEOMETRY_FILENAME).
     """
     project_dir = Path(project_dir).resolve()
@@ -112,10 +120,10 @@ def resolve_config_paths(config: dict, project_dir: Path | str) -> dict:
 
 
 def find_struc_geometry(folder: Path | str) -> Path | None:
-    """The structural geometry in ``folder``: a kite data folder's FEM file,
-    else a results folder's deformed snapshot, else None."""
+    """The structural geometry in ``folder`` (awesIO ``structure.yml``, else a
+    file in a retired format), else None."""
     folder = Path(folder)
-    for name in (DEFAULT_STRUC_GEOMETRY_FILENAME, SNAPSHOT_STRUC_GEOMETRY_FILENAME):
+    for name in (DEFAULT_STRUC_GEOMETRY_FILENAME, *LEGACY_STRUC_GEOMETRY_FILENAMES):
         if (folder / name).exists():
             return folder / name
     return None

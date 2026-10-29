@@ -189,3 +189,34 @@ def test_cold_seed_slows_down_until_the_wing_meets_the_wind_mid_band():
     va = np.asarray(aerodynamic_vsm.DEFAULT_TRANSFORMATION_C_FROM_VSM) @ kite.velocity_apparent_wind
     aoa = np.degrees(aerodynamic_vsm.mid_span_chord_angle_of_attack(body, va))
     assert 6.0 < aoa < 9.0 and guess[0] < 10.0  # mid-band 7.5 deg
+
+
+@pytest.mark.parametrize(
+    "relative",
+    ["structure.yml", "deformed_results/powered_2019/structure.yml"],
+)
+def test_bridle_line_specs_index_the_body_line_system(relative):
+    """The node-index specs rebuild exactly the line system ``initialize`` gives
+    the body: same segments, same order, the drag-equivalent diameters."""
+    from awetrim.aerodynamics.line_drag import attach_bridle_lines
+    from awetrim.aerostructural.coupled.awesio_structure import load_structure
+
+    path = PROJECT_DIR / "data" / "LEI-V3-KITE" / relative
+    if not path.exists():  # pragma: no cover - shipped with the repo
+        pytest.skip(f"{path} not available")
+    structure = load_structure(path)
+    specs = aerodynamic_vsm.parse_bridle_line_specs(structure)
+
+    class Body:
+        pass
+
+    body = Body()
+    attach_bridle_lines(body, structure)
+    rebuilt = Body()
+    rebuilt._bridle_line_system = []
+    aerodynamic_vsm.rebuild_bridle_line_system(rebuilt, structure.positions, specs)
+    assert len(rebuilt._bridle_line_system) == len(body._bridle_line_system) > 0
+    for got, want in zip(rebuilt._bridle_line_system, body._bridle_line_system):
+        np.testing.assert_array_equal(got[0], want[0])
+        np.testing.assert_array_equal(got[1], want[1])
+        assert got[2] == want[2]

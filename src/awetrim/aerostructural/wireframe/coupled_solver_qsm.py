@@ -410,7 +410,7 @@ def main(
 
     # The stiffnesses the elongation bound EARNED, if a neighbour is handing
     # them over. They are per-element and cannot be written back into
-    # struc_geometry.yaml (which stores one modulus per material), so without
+    # the structure file (which stores one modulus per material), so without
     # this a restart re-derives every one of them: at u_dp 0.18 that is 19-29
     # stiffening events, each costing `stiffness_settle_iters` before the next
     # is allowed -- most of the solve. Clipped to this geometry's own ceiling,

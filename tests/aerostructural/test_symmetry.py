@@ -62,20 +62,19 @@ def _psm():
     """The LEI-V3 PSM-format wireframe: the reduction of the FEM geometry."""
     from awetrim.aerostructural.wireframe.reduce_fem import reduce_fem_geometry
 
-    return reduce_fem_geometry(
-        yaml.safe_load((KITE_DIR / "struc_geometry_FEM_full.yaml").read_text(encoding="utf-8"))
-    )
+    from awetrim.aerostructural.coupled.awesio_structure import load_structure
+
+    return reduce_fem_geometry(load_structure(KITE_DIR / "structure.yml"))
 
 
 def test_the_lei_v3_geometries_are_symmetric():
-    from awetrim.aerostructural.coupled import read_struc_geometry_yaml
+    from awetrim.aerostructural.utils import resolve_structure
     from awetrim.aerostructural.wireframe import structural_geometry_io
 
     r = structural_geometry_io.main(_psm())
     assert check_mirror_symmetry(r[0], r[7], r[10], r[11], r[13], r[1]) == []
     system = yaml.safe_load((KITE_DIR / "system.yaml").read_text(encoding="utf-8"))
-    full = yaml.safe_load((KITE_DIR / "struc_geometry_FEM_full.yaml").read_text(encoding="utf-8"))
-    r = read_struc_geometry_yaml.main(full, system_config=system)
+    r = resolve_structure(KITE_DIR / "structure.yml", system_config=system)
     assert check_mirror_symmetry(r[0], r[10], r[13], r[14], r[16], r[1]) == []
 
 

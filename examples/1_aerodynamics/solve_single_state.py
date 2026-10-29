@@ -2,7 +2,7 @@
 
 To trim on a deformed shape from an aerostructural run, pass
 ``--deformed-from <case_dir>`` (where ``case_dir`` contains the deformed
-``aero_geometry.yaml`` and ``struc_geometry.yaml``). The deformed geometries
+``aero_geometry.yaml`` and ``structure.yml``). The deformed geometries
 are used by VSM and for plotting, but mass, inertia tensor and centre of
 gravity are still read from ``system.yaml`` in ``--config-folder`` -- this
 script does NOT recompute inertia or CoG from the deformed shape.
