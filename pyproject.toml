@@ -58,7 +58,7 @@ dependencies = [
   "VSM @ git+https://github.com/awegroup/Vortex-Step-Method.git@1201f6fd1e4c419159ce8867cbb654210d9ef060",
   # EKF-AWE: the shared KCU drag model (awetrim.aerodynamics.kcu_drag). Its flight
   # reconstructions are read by awetrim.flight_data, not produced here.
-  "awes-ekf @ git+https://github.com/awegroup/EKF-AWE.git@33fc63515bca432d6e01f0386ce4d306c7a5ace1",
+  "awes-ekf @ git+https://github.com/awegroup/EKF-AWE.git@52579b914fefa070e8298539e68677cbcdb7c4b8",
   "awesIO @ git+https://github.com/awegroup/awesIO.git@5799a2dbd3e74c83914dae342aa6d9a43b2180e1",
 ]
 
