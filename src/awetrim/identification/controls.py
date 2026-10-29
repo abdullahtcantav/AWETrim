@@ -111,17 +111,49 @@ def flight_steering_to_us(
     return -np.asarray(kcu_actual_steering, dtype=float) / float(norm)
 
 
-def flight_depower_to_power_tape_length(kcu_actual_depower):
-    """Map flight ``kcu_actual_depower`` to absolute power-tape length [m]."""
+def flight_depower_match(kite_dir, flight=None) -> tuple[float, float] | None:
+    """``(reel_out, reel_in)``: the model power-tape lengths [m] that
+    reproduce a flight's powered / depowered states, as the kite's
+    ``identification.yaml`` records them (``fit: flight_match``, the
+    default fidelity's). ``None`` without such a record, or when ``flight``
+    (a year) is given and the record is of another flight.
+    """
+    from pathlib import Path
+
+    from awetrim.identification.aerostructural_dataset import identification_settings
+
+    path = Path(kite_dir) / "identification.yaml"
+    if not path.exists():
+        return None
+    match = identification_settings(path, "fit")[1].get("flight_match")
+    if not match or (flight is not None and str(match.get("flight")) != str(flight)):
+        return None
+    return float(match["reel_out"]), float(match["reel_in"])
+
+
+def flight_depower_to_power_tape_length(kcu_actual_depower, match=None):
+    """Map flight ``kcu_actual_depower`` to a power-tape length [m].
+
+    Without ``match`` the physical tape the KCU set (powered 1.7 m, depowered
+    2.1 m). With ``match = (reel_out, reel_in)`` (:func:`flight_depower_match`)
+    the MODEL tape that reproduces the flight: the same linear map through
+    the matched powered and depowered lengths -- the ROM's own u_p.
+    """
+    powered, depowered = (
+        (FLIGHT_DEPOWER_POWERED_LDP_M, FLIGHT_DEPOWER_DEPOWERED_LDP_M)
+        if match is None
+        else (float(match[0]), float(match[1]))
+    )
     kcu = np.asarray(kcu_actual_depower, dtype=float)
-    slope = (FLIGHT_DEPOWER_DEPOWERED_LDP_M - FLIGHT_DEPOWER_POWERED_LDP_M) / (
+    slope = (depowered - powered) / (
         FLIGHT_DEPOWER_DEPOWERED_KCU - FLIGHT_DEPOWER_POWERED_KCU
     )
-    return FLIGHT_DEPOWER_POWERED_LDP_M + (kcu - FLIGHT_DEPOWER_POWERED_KCU) * slope
+    return powered + (kcu - FLIGHT_DEPOWER_POWERED_KCU) * slope
 
 
-def flight_dataframe_depower_to_power_tape_length(flight_data):
-    """Map a flight-data table to ROM depower input ``u_p = l_dp`` [m].
+def flight_dataframe_depower_to_power_tape_length(flight_data, match=None):
+    """Map a flight-data table to ROM depower input ``u_p = l_dp`` [m]
+    (``match``: see :func:`flight_depower_to_power_tape_length`).
 
     Prefer measured KCU depower. Fall back to the setpoint only if the measured
     column is unavailable. The legacy ``up`` column is intentionally not used:
@@ -129,9 +161,9 @@ def flight_dataframe_depower_to_power_tape_length(flight_data):
     power-tape length used by the identified ROM.
     """
     if "kcu_actual_depower" in flight_data:
-        return flight_depower_to_power_tape_length(flight_data["kcu_actual_depower"])
+        return flight_depower_to_power_tape_length(flight_data["kcu_actual_depower"], match)
     if "kcu_set_depower" in flight_data:
-        return flight_depower_to_power_tape_length(flight_data["kcu_set_depower"])
+        return flight_depower_to_power_tape_length(flight_data["kcu_set_depower"], match)
     raise KeyError(
         "Need kcu_actual_depower or kcu_set_depower to build physical ROM depower."
     )

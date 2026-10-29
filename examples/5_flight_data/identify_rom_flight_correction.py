@@ -98,11 +98,13 @@ from awetrim.identification.controls import (
     FLIGHT_STEERING_ZERO_OFFSET_2019,
     flight_dataframe_depower_to_power_tape_length,
     flight_dataframe_steering_to_us,
+    flight_depower_match,
 )
 from awetrim.plotting.plotting import PALETTE, set_plot_style
 from awetrim.system.factory import create_system_model_from_yaml
 from awetrim.system.kite import stall_blend
 from awetrim.utils.config_paths import (
+    LEI_V3_DATA_DIR,
     LEI_V3_ROM_AEROSTRUCTURAL_CONFIG,
     LEI_V3_ROM_SEMI_EMPIRICAL_CONFIG,
     LEI_V3_SYSTEM_FLOWN_CONFIG,
@@ -218,7 +220,11 @@ def build_dataset(rom: dict, flight_file: Path = EKF_FILE) -> pd.DataFrame:
     f_wing = -f_bridle_rom + float(kite.mass_wing) * (accel - G)
     phi_a_w = roll_about_va(f_wing, va, radial) - roll_about_va(-f_bridle_rom, va, radial)
 
-    flight["input_depower"] = flight_dataframe_depower_to_power_tape_length(flight)
+    # in the ROM's u_p: the model tapes that reproduce the 2019 flight
+    # (identification.yaml flight_match), not the flown 1.70 / 2.10
+    flight["input_depower"] = flight_dataframe_depower_to_power_tape_length(
+        flight, flight_depower_match(LEI_V3_DATA_DIR, 2019)
+    )
     data = pd.DataFrame({
         "time": ekf.time, "cycle": flight.cycle.astype(int),
         "speed_radial": flight.tether_reelout_speed, "elevation": flight.kite_elevation,
@@ -296,15 +302,35 @@ def fit_theta(train: pd.DataFrame, terms=None) -> ap.PolynomialFit:
         criterion="cv", min_relative_improvement=MIN_RELATIVE_IMPROVEMENT, backward=True)
 
 
-def fit_roll_gain(train: pd.DataFrame) -> dict:
-    """phi_a,w = k u_s(t - lag) through the origin; free-intercept fit as a check."""
-    g = train[np.isfinite(train.u_s_lagged) & np.isfinite(train.phi_a_w)]
+def roll_gain_shape(params: dict, u_p) -> np.ndarray:
+    """k(u_p) / k_0 of the AS ROM (``gain_roll_steering_depower``): 1 without
+    depower terms. The flight fit scales the WHOLE k(u_p) by one factor."""
+    k0 = float(params["gain_roll_steering"])
+    k = np.full_like(np.asarray(u_p, dtype=float), k0)
+    for power, coef in enumerate(params.get("gain_roll_steering_depower") or [], start=1):
+        k = k + float(coef) * np.asarray(u_p, dtype=float) ** power
+    return k / k0
+
+
+def fit_roll_gain(train: pd.DataFrame, params: dict) -> dict:
+    """phi_a,w = k_0 s(u_p) u_s(t - lag) through the origin, s the AS ROM's
+    k(u_p) shape (:func:`roll_gain_shape`); free-intercept fit as a check.
+    ``gain_roll_steering`` is the fitted k_0, ``gain_roll_steering_depower``
+    the AS depower terms scaled with it."""
+    g = train[np.isfinite(train.u_s_lagged) & np.isfinite(train.phi_a_w)].copy()
+    shape = roll_gain_shape(params, g.u_p.to_numpy())
+    g["u_s_lagged"] = g.u_s_lagged.to_numpy() * shape
+    g["u_s"] = g.u_s.to_numpy() * shape
     x, y = g.u_s_lagged.to_numpy(), g.phi_a_w.to_numpy()
     k = float(x @ y / (x @ x))
     (k_free, offset), *_ = np.linalg.lstsq(np.c_[x, np.ones_like(x)], y, rcond=None)
     resid = y - k * x
     x0 = g.u_s.to_numpy()
-    return {"gain_roll_steering": k, "lag_s": STEERING_LAG_S,
+    scale = k / float(params["gain_roll_steering"])
+    return {"gain_roll_steering": k,
+            "gain_roll_steering_depower": [
+                scale * float(c) for c in params.get("gain_roll_steering_depower") or []],
+            "lag_s": STEERING_LAG_S,
             "r2": float(1 - resid.var() / y.var()),
             "rms_deg": float(np.rad2deg(resid.std())),
             "gain_without_lag": float(x0 @ y / (x0 @ x0)),
@@ -378,7 +404,7 @@ def bootstrap(pool: pd.DataFrame, theta_fit, drag_fit, params, seed: int = 0) ->
             theta = theta_params(params, fit_theta(sample, theta_terms))
             row += [theta["angle_pitch_tether_0"], theta["slope_angle_pitch_tether_depower"]]
         d = fit_drag(sample, drag_terms)
-        row += [fit_roll_gain(sample)["gain_roll_steering"]]
+        row += [fit_roll_gain(sample, params)["gain_roll_steering"]]
         draws.append(row + [d.intercept] + [c for _, c in d.terms])
     draws = np.asarray(draws)
     labels = ((["angle_pitch_tether_0", "slope_angle_pitch_tether_depower"]
@@ -398,6 +424,8 @@ def merged_rom(rom: dict, theta: dict, drag_fit: ap.PolynomialFit, roll: dict,
     aero = doc["aerodynamics"]
     aero["params"].update(theta)
     aero["params"]["gain_roll_steering"] = float(roll["gain_roll_steering"])
+    if roll["gain_roll_steering_depower"]:
+        aero["params"]["gain_roll_steering_depower"] = roll["gain_roll_steering_depower"]
     aero["params"]["CD0"] = float(aero["params"]["CD0"] + drag_fit.intercept)
     entries = aero["coefficients"]["CD"]
     for power_map, coef in drag_fit.terms:
@@ -487,9 +515,10 @@ def plot(train, test, theta, drag_fit, params, path: Path,
     grid = pd.DataFrame({"u_p": np.linspace(1.6, 2.2, 50), "u_s": 0.0})
     axes[1, 0].plot(grid.u_p, predict_controls(drag_fit, grid), color=PALETTE["Black"],
                     lw=1.8, label=r"$\Delta C_D$ at $u_s=0$")
-    grid = pd.DataFrame({"u_p": 1.7, "u_s": np.linspace(-0.2, 0.2, 50)})
+    u_p_ro = flight_depower_match(LEI_V3_DATA_DIR, 2019)[0]  # the matched reel-out
+    grid = pd.DataFrame({"u_p": u_p_ro, "u_s": np.linspace(-0.2, 0.2, 50)})
     axes[1, 1].plot(grid.u_s, predict_controls(drag_fit, grid), color=PALETTE["Black"],
-                    lw=1.8, label=r"$\Delta C_D$ at $u_p=1.7$")
+                    lw=1.8, label=rf"$\Delta C_D$ at $u_p={u_p_ro:.2f}$")
     for ax in axes[1]:
         ax.legend(frameon=False, fontsize=8, markerscale=4)
 
@@ -585,7 +614,7 @@ def main() -> None:
     print("\ndC_D = " + f"{drag_fit.intercept:+.5f}" + "".join(
         f" {c:+.5f} {ap.term_label(pm)}" for pm, c in drag_fit.terms))
     print("  selection path:", drag_fit.selection_path, f"CV RMSE {drag_fit.cv_rmse:.5f}")
-    roll = fit_roll_gain(train)
+    roll = fit_roll_gain(train, params)
     print("roll gain: k {gain_roll_steering:+.4f} (AS {as_gain:+.4f}), R2 {r2:.3f}, lag {lag_s} s; "
           "no lag {gain_without_lag:+.4f}; free intercept {offset_deg:+.2f} deg; per phase "
           "{per_phase}".format(as_gain=params["gain_roll_steering"], **roll))

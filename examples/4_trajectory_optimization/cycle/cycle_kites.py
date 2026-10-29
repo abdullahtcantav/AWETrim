@@ -76,7 +76,7 @@ from pathlib import Path
 
 import yaml
 
-from awetrim.identification.controls import rom_depower_band
+from awetrim.identification.controls import flight_depower_match, rom_depower_band
 from awetrim.system.factory import resolve_rom_config_path
 from awetrim.utils.config_paths import DATA_DIR
 
@@ -195,6 +195,9 @@ def resolve_kite(kite: str | Path | None = None) -> dict:
         "cycle_config_dir": folder / "cycle_configs",
         "results_dir": Path("results") / folder.name / "optimization" / "full_cycle",
         "depower_band": rom_depower_band(rom),
+        # the ROM tapes of the reference flight (identification.yaml
+        # flight_match), the u_p the flight's depower is read in
+        "depower_match": flight_depower_match(folder, flight.get("year")),
         "wind": dict(profile["wind"]),
         "winch_law": dict(profile["winch_law"]),
         "r0": r0,

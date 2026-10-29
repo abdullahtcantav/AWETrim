@@ -10,6 +10,7 @@ from awetrim.kinematics.parametrized_patterns import (
 )
 from awetrim.utils.color_palette import set_plot_style, custom_cmap
 from awetrim.utils.config_paths import (
+    LEI_V3_DATA_DIR,
     LEI_V3_DOWNLOOP_SPLINE_CONFIG,
     LEI_V3_SYSTEM_FLOWN_CONFIG,
 )
@@ -17,6 +18,7 @@ from awetrim.environment.Wind import Wind
 from awetrim.identification.controls import (
     ROM_POWERED_INPUT_DEPOWER,
     flight_dataframe_depower_to_power_tape_length,
+    flight_depower_match,
 )
 from awetrim.system.factory import create_system_model_from_yaml
 from awetrim.timeseries.phase import Phase
@@ -396,17 +398,21 @@ def simulate_cycle(
         if any(
             c in flight_cycle.columns for c in ("kcu_actual_depower", "kcu_set_depower")
         ):
-            u_p_raw = flight_dataframe_depower_to_power_tape_length(flight_cycle)
+            # the model tapes that reproduce the 2019 flight (flight_match)
+            u_p_raw = flight_dataframe_depower_to_power_tape_length(
+                flight_cycle, flight_depower_match(LEI_V3_DATA_DIR, 2019)
+            )
             s_meas = np.linspace(0.0, 1.0, len(u_p_raw), endpoint=True)
             u_dep_profile = np.interp(s_sim, s_meas, u_p_raw)
             sim_params["input_depower_profile"] = u_dep_profile.tolist()
             sim_params["input_depower"] = float(u_dep_profile[0])
             print(
-                f"Using physical depower l_dp profile from KCU measurements "
+                f"Using the matched depower profile from KCU measurements "
                 f"(resampled to {sim_params['n_points']+1} points)"
             )
         else:
-            sim_params["input_depower"] = ROM_POWERED_INPUT_DEPOWER
+            match = flight_depower_match(LEI_V3_DATA_DIR, 2019)
+            sim_params["input_depower"] = match[0] if match else ROM_POWERED_INPUT_DEPOWER
 
         # Loosen the per-node accept tolerance so the reel-out trim can advance
         # past marginal (near-singular) nodes instead of truncating mid-cycle.

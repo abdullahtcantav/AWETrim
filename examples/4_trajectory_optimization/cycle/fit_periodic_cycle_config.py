@@ -152,6 +152,7 @@ from awetrim.utils.system_config import get_kite  # noqa: E402
 # Reference flight of the selected kite (``cycle_kites`` "flight" entry): the
 # loader name plus its arguments, used by SHAPE_SOURCE == "experimental".
 FLIGHT = {}
+DEPOWER_MATCH = None  # (reel_out, reel_in) ROM tapes of the flight, cycle_kites
 CYCLE_ID = None
 
 # Periodic-spline control points and sim grid. M_PER_SECOND/M_MAX only apply
@@ -330,7 +331,7 @@ def configure_kite(name=None):
     """
     global KITE_NAME, KITE_DIR, SYSTEM_CONFIG_PATH, R0, CYCLE_DURATION_S, WINCH_LAW
     global DEPOWER_BAND, DEPOWER_RATE, OUTPUT_PATH, SEED_PLOT_PATH
-    global FLIGHT, CYCLE_ID, _ARTIFICIAL_BASE
+    global FLIGHT, CYCLE_ID, _ARTIFICIAL_BASE, DEPOWER_MATCH
     kite = resolve_kite(name)
     KITE_NAME = kite["name"]
     KITE_DIR = Path(kite["dir"])
@@ -340,6 +341,7 @@ def configure_kite(name=None):
     WINCH_LAW = dict(kite["winch_law"])
     DEPOWER_BAND = tuple(kite["depower_band"])
     FLIGHT = dict(kite["flight"])
+    DEPOWER_MATCH = kite.get("depower_match")
     CYCLE_ID = FLIGHT.get("cycle_id")
     OUTPUT_PATH = Path(kite["cycle_config_dir"]) / SEED_FILENAME
     SEED_PLOT_PATH = Path(kite["results_dir"]) / "seed_path.png"
@@ -664,7 +666,7 @@ def _cycle_arrays(ekf_df, flight_df, cycle_id):
         "tether_force": flight["ground_tether_force"].to_numpy(dtype=float),
         "reelout_speed": flight["tether_reelout_speed"].to_numpy(dtype=float),
         "time": flight["time"].to_numpy(dtype=float),
-        "l_dp": flight_dataframe_depower_to_power_tape_length(flight),
+        "l_dp": flight_dataframe_depower_to_power_tape_length(flight, DEPOWER_MATCH),
         "wind": ekf.get(
             "wind_speed_horizontal", flight.get("wind_speed_horizontal")
         ).to_numpy(dtype=float),

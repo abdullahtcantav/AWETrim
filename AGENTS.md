@@ -205,7 +205,11 @@ the factory clips the optimizer's depower box to `validity.input_depower`,
 its steering box to `validity.input_steering_abs_max` (0.143, the 0.20 m the
 steering chains reached) and raises the tension bound to the floor;
 `fit.fidelities.wireframe.flight_match` records the model tapes that reproduce
-the 2019 reel-out / reel-in, to be updated whenever the match is redone) and
+the 2019 reel-out / reel-in, to be updated whenever the match is redone, and
+`identification.controls.flight_depower_match` reads it so flight depower is
+mapped onto the ROM's u_p (`flight_depower_to_power_tape_length(.., match)`;
+without a match: the physical flown tapes 1.70 / 2.10; the cycle scripts
+pass it, `cycle_profile.yaml` is stated in it) and
 `rom_config_aerostructural_flight_corrected.yaml` (STALE: the flight correction
 of the PREVIOUS aerostructural ROM (_billow9 PSM wireframe), kept until it is
 redone on the current one; the method:

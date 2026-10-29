@@ -22,6 +22,7 @@ from awetrim.identification.controls import (
     ROM_DEPOWERED_INPUT_DEPOWER,
     flight_dataframe_depower_to_power_tape_length,
     flight_dataframe_steering_to_us,
+    flight_depower_match,
 )
 import casadi as ca
 import time
@@ -30,7 +31,7 @@ from scipy.ndimage import gaussian_filter1d
 import yaml
 
 # Validation reproduces a specific flight, so use the as-flown KCU mass.
-from awetrim.utils.config_paths import LEI_V3_SYSTEM_FLOWN_CONFIG
+from awetrim.utils.config_paths import LEI_V3_DATA_DIR, LEI_V3_SYSTEM_FLOWN_CONFIG
 from awetrim.utils.system_config import get_kite, get_tether
 
 RUN_WILLIAMS = False
@@ -222,12 +223,15 @@ speed_tangential = np.linalg.norm(np.cross(position, velocity), axis=1) / np.max
 azimuth = np.arctan2(results.kite_position_y, results.kite_position_x)
 
 
-# ROM controls use the physical convention from the 2019 flight:
-#   u_p = absolute power-tape length l_dp [m] (powered ~= 1.7, depowered ~= 2.1)
-#   u_s = -kcu_actual_steering / 100
+# ROM controls from the 2019 flight:
+#   u_p = the MODEL power-tape length [m] that reproduces the flight
+#         (identification.yaml flight_match: powered 1.94, depowered 2.40;
+#         flown 1.70 / 2.10)
+#   u_s = standardised steering (identification.controls, 2019 norm)
 # Do not feed the legacy normalised flight_data["up"] / ["us"] columns into the ROM.
+DEPOWER_MATCH = flight_depower_match(LEI_V3_DATA_DIR, 2019)
 flight_data["input_depower"] = flight_dataframe_depower_to_power_tape_length(
-    flight_data
+    flight_data, DEPOWER_MATCH
 )
 flight_data["input_steering_measured"] = flight_dataframe_steering_to_us(flight_data)
 
@@ -642,7 +646,9 @@ for cfg, label in zip(aero_cfgs, aero_labels):
 for label, solutions_df in all_solutions.items():
     # --- Create phase masks ---
     powered_depower_threshold = 0.5 * (
-        ROM_POWERED_INPUT_DEPOWER + ROM_DEPOWERED_INPUT_DEPOWER
+        sum(DEPOWER_MATCH)
+        if DEPOWER_MATCH
+        else ROM_POWERED_INPUT_DEPOWER + ROM_DEPOWERED_INPUT_DEPOWER
     )
     mask_pow = (
         (flight_data.input_depower < powered_depower_threshold)
