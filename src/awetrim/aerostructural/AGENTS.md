@@ -973,7 +973,7 @@ All defaults are defined in `awetrim.aerostructural.case.CONFIG_DEFAULTS`. Key s
 
 ```yaml
 aerodynamic:
-  n_aero_panels_per_struc_section: 5   # x 9 sections = 45 panels (2026-08-31)
+  n_aero_panels_per_struc_section: 5   # x 27 FEM sections = 135 panels
   spanwise_panel_distribution: uniform
   max_iterations: 1000
   allowed_error: 1.0e-8                # matched pair with gamma_loop_type --

@@ -75,6 +75,22 @@ def compute_wing_stats_from_pss(struc_geometry):
         np.array([node_positions[n] for n in te_ids]) if te_ids else np.empty((0, 3))
     )
 
+    result = {
+        "mass": round(total_mass, 4),
+        "center_of_mass": [round(float(v), 4) for v in cg],
+        "inertia_tensor": [[round(float(v), 4) for v in row] for row in I],
+    }
+    result.update(wing_planform_stats(le_pts, te_pts))
+    return result
+
+
+def wing_planform_stats(le_pts, te_pts) -> dict:
+    """Span and areas [m, m2] of a wing given by its LE/TE points (one pair
+    per section, in span order): ``span``, ``projected_surface_area`` (x-y),
+    ``planform_surface_area`` (flat) and ``side_projected_area`` (y-z), each
+    only when it can be computed."""
+    le_pts = np.asarray(le_pts, dtype=float).reshape(-1, 3)
+    te_pts = np.asarray(te_pts, dtype=float).reshape(-1, 3)
     span_val = None
     projected_area_val = None
     side_area_val = None
@@ -141,13 +157,7 @@ def compute_wing_stats_from_pss(struc_geometry):
             side_area_val = float(S_side)
             flat_area_val = float(S_flat)
 
-    result = {
-        "mass": round(total_mass, 4),
-        "center_of_mass": [round(float(v), 4) for v in cg],
-        "inertia_tensor": [[round(float(v), 4) for v in row] for row in I],
-    }
-
-    # Include computed geometric fields when available
+    result = {}
     if span_val is not None:
         result["span"] = round(float(span_val), 4)
     if projected_area_val is not None:
@@ -156,7 +166,6 @@ def compute_wing_stats_from_pss(struc_geometry):
         result["planform_surface_area"] = round(float(flat_area_val), 4)
     if side_area_val is not None:
         result["side_projected_area"] = round(float(side_area_val), 4)
-
     return result
 
 
