@@ -45,8 +45,7 @@ two floats per kite and never enter a symbolic graph -- which is why this
 module needs neither the ``xp`` math-namespace pattern of
 ``environment/profile_laws.py`` nor ``ca.interpolant``. Linear interpolation
 differs from the cubic spline of the reference implementation by 0.23 % (cdt)
-and 0.08 % (cdp) at the LEI-V3 fineness -- 0.23 %/0.16 % at the LEI-V9 one, and
-at worst 1.4 %/1.9 % anywhere in the tables' interpolation range -- well below
+and 0.08 % (cdp) at the LEI-V3 fineness, and at worst 1.4 %/1.9 % anywhere in the tables' interpolation range -- well below
 the uncertainty of a handbook bluff-body coefficient.
 
 Pairing note (2026-08-21)
