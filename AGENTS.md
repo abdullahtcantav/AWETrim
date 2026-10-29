@@ -211,9 +211,12 @@ mapped onto the ROM's u_p (`flight_depower_to_power_tape_length(.., match)`,
 the match required: the flown tape is not known from the logs, the 1.7 / 2.1
 m that stood in `controls` until 2026-10-29 was the previous model's match;
 the cycle and flight scripts pass it, `cycle_profile.yaml` is stated in it) and
-`rom_config_aerostructural_flight_corrected.yaml` (STALE: the flight correction
-of the PREVIOUS aerostructural ROM (_billow9 PSM wireframe), kept until it is
-redone on the current one; the method:
+`rom_config_aerostructural_flight_corrected.yaml` (the 2019 flight correction
+of that ROM, redone 2026-10-29 with the flight depower read through
+flight_match; hold-out cycles 60-67, median tension / v_tau error: reel-out
+-0.4 % / +1.6 % (uncorrected +3.7 % / +2.4 %), reel-in +28 % / +11 %
+(uncorrected +59 % / +39 %); the roll gain is ONE scale on the whole k(u_p);
+the method:
 theta_b and a single-input dC_D(u_p, u_s^2) fitted to 2019 flight, cycles 60-67
 held out: `identify_rom_flight_correction.py` (equation error: theta_b from the
 flight LIFT, drag at equal lift) then `refine_rom_flight_output_error.py`
