@@ -3,7 +3,7 @@
 The aerodynamics (Vortex Step Method) and the structure are iterated to a
 converged deformed shape, trimmed at the flight state set below. The structure
 is Billow's full fidelity: bridle lines and pulleys, plus inflatable Timoshenko tube beams (leading edge and struts) and a wrinkling
-membrane canopy, read from struc_geometry_FEM_full.yaml -- the same file
+membrane canopy, read from structure.yml (awesIO) -- the same file
 run_simulation_PSM.py reduces to a wireframe, so with the same inputs the two
 scripts differ only in the structural model. About a minute.
 
@@ -26,7 +26,7 @@ from awetrim.aerostructural.results import aerostructural_results_root
 # ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
-KITE = "LEI-V3-KITE"  # a folder under data/ with a struc_geometry_FEM_full.yaml
+KITE = "LEI-V3-KITE"  # a folder under data/ with a structure.yml
 SYSTEM_FILE = "system.yaml"  # in data/<KITE>/: masses (KCU) and tether
 
 # Flight state. Angles are those of the course-aligned spherical frame: the

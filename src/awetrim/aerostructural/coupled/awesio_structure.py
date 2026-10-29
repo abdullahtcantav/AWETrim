@@ -160,7 +160,7 @@ def to_awesio(
     """The awesIO structure document of ``struc_geometry`` as the reader resolves it.
 
     Args:
-        struc_geometry: A loaded ``struc_geometry_FEM_full.yaml`` (not modified).
+        struc_geometry: A loaded file in the retired ``struc_geometry_FEM_full`` format (not modified).
         kcu_mass: Extra mass on the KCU point [kg]. ``system.yaml`` is its
             single source (``utils.system_config.get_kcu_mass``); 0 leaves it
             out of the document.
@@ -266,11 +266,22 @@ def to_awesio(
 
     # -- stations and faces ----------------------------------------------------
     strut_name_of = {row[-1][0]: row[0] for row in geometry["strut_tubes"]["data"]}
+    # The leading edge's diameter AT each strut, as the authoring file states
+    # it: the tube elements do not determine it (the LEI-V3's is up to 7 mm
+    # above the elements meeting the strut), and the wireframe reduction sizes
+    # its leading-edge members with it.
+    strut_headers = geometry["strut_tubes"]["headers"]
+    le_diameter_of = {
+        row[-1][0]: float(dict(zip(strut_headers, row))["le_diameter"])
+        for row in geometry["strut_tubes"]["data"]
+    }
     sections = sorted(list(canopy_sections) + list(strut_sections), key=lambda s: s[0])
     station_rows = []
     for k, section in enumerate(sections):
         station = strut_name_of.get(section[0], f"section_{k + 1}")
-        station_rows.append([station, WING, _Row(_name(n) for n in section)])
+        station_rows.append(
+            [station, WING, _Row(_name(n) for n in section), le_diameter_of.get(section[0])]
+        )
     face_rows = []
     for k, (s1, s2) in enumerate(zip(sections[:-1], sections[1:])):
         for j in range(len(s1) - 1):
@@ -352,7 +363,9 @@ def to_awesio(
             ["-", "-", "m", "m", "-", "-", "-", "m"],
             segment_rows,
         ),
-        "spanwise_stations": _table(["name", "wing", "points"], ["-", "-", "-"], station_rows),
+        "spanwise_stations": _table(
+            ["name", "wing", "points", "le_diameter"], ["-", "-", "-", "m"], station_rows
+        ),
         "pulleys": _table(["name", "segments"], ["-", "-"], pulley_rows),
         "wings": _table(
             ["name", "pos_ENU", "Q_KA2ENU", "canopy_material"], ["-", "m", "-", "-"],
@@ -365,7 +378,11 @@ def to_awesio(
         "tubes": _table(
             ["name", "bodies", "diameter", "pressure", "material"], ["-", "-", "m", "Pa", "-"], tube_table
         ),
-        "awetrim": {"kcu_point": _name(0), "strut_padding": strut_padding},
+        "awetrim": {
+            "kcu_point": _name(0),
+            "pulley_mass": float(geometry["pulley_mass"]),
+            "strut_padding": strut_padding,
+        },
     }
     document["metadata"]["connectivity_sha"] = connectivity_sha(document)
     return document
@@ -414,7 +431,7 @@ def nodal_masses(document: dict) -> np.ndarray:
 CANOPY_SPRING_STIFFNESS = 5000.0
 
 
-def from_awesio(document: dict) -> tuple:
+def from_awesio(document: dict, kcu_mass: float = 0.0) -> tuple:
     """The resolved model of an awesIO document, as :func:`read_struc_geometry_yaml.main`
     returns it, so every consumer of that tuple reads awesIO unchanged.
 
@@ -437,6 +454,8 @@ def from_awesio(document: dict) -> tuple:
     if not np.allclose(wing[0]["Q_KA2ENU"], [1.0, 0.0, 0.0, 0.0]):
         raise ValueError("only a wing at the schema's zenith pose (Q_KA2ENU = 1) is read")
     m_arr = nodal_masses(document)
+    # system.yaml is the KCU mass's single source; the document carries none.
+    m_arr[index[(document.get("awetrim") or {}).get("kcu_point", "0")]] += float(kcu_mass)
     point_on = {p["body"]: index[p["name"]] for p in points if p["body"] is not None}
 
     materials = {m["name"]: m for m in _rows(document.get("materials"))}
@@ -566,7 +585,491 @@ def _rows(table: dict | None) -> list[dict]:
     return [dict(zip(table["headers"], row)) for row in table["data"]]
 
 
+#: Material of the wireframe's wing members: diameter 0, so an awesIO reader
+#: derives no mass from them; their stiffness and mass are tool columns.
+WIREFRAME_MEMBER_MATERIAL = "wireframe_member"
+
+
+def _is_awesio(document: dict) -> bool:
+    return (document.get("metadata") or {}).get("schema") == SCHEMA
+
+
+def load_structure(source, *, convert_legacy: bool = True) -> "Structure":
+    """The :class:`Structure` of an awesIO file (path or loaded dict).
+
+    A file in the retired AWETrim formats -- a full FEM geometry
+    (``strut_tubes``) or a PSM-format wireframe (``wing_elements``) -- is
+    converted on the fly with a DeprecationWarning; convert it once with
+    ``python -m awetrim.aerostructural.coupled.awesio_structure`` instead.
+    """
+    import warnings
+
+    if isinstance(source, Structure):
+        return source
+    if isinstance(source, dict):
+        document, label = source, "<dict>"
+    else:
+        label = str(source)
+        with open(source, "r", encoding="utf-8") as handle:
+            document = yaml.safe_load(handle)
+    if _is_awesio(document):
+        return Structure(document)
+    if not convert_legacy:
+        raise ValueError(f"{label} is not an awesIO structure document")
+    warnings.warn(
+        f"{label} is in a retired AWETrim structure format; converting it to "
+        "awesIO in memory. Convert the file once with "
+        "`python -m awetrim.aerostructural.coupled.awesio_structure`.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    if "strut_tubes" in document:
+        return Structure(to_awesio(document))
+    if "wing_elements" in document:
+        return Structure(wireframe_to_awesio(document))
+    raise ValueError(f"{label}: neither awesIO nor a known AWETrim structure format")
+
+
+class Structure:
+    """Read-only view of an awesIO structure document, in AWETrim's terms.
+
+    Nodes are indexed in ``points`` row order. Positions are in the wing's KA
+    frame (the document's ENU positions less the wing origin), which is the
+    frame every AWETrim model works in.
+    """
+
+    def __init__(self, document: dict):
+        if not _is_awesio(document):
+            raise ValueError("not an awesIO structure document")
+        self.document = document
+        points = _rows(document["points"])
+        self.names = [p["name"] for p in points]
+        self.index = {name: i for i, name in enumerate(self.names)}
+        wings = _rows(document.get("wings"))
+        if len(wings) != 1:
+            raise ValueError(f"expected one wing, found {len(wings)}")
+        self.origin = np.asarray(wings[0]["pos_ENU"], dtype=float)
+        self.positions = np.array([p["pos_ENU"] for p in points], dtype=float) - self.origin
+        self.fixed = [i for i, p in enumerate(points) if p["fixed"]]
+        tool = document.get("awetrim") or {}
+        self.kcu = self.index[tool.get("kcu_point", "0")]
+        self.pulley_mass = float(tool.get("pulley_mass", 0.0))
+        self.materials = {m["name"]: m for m in _rows(document.get("materials"))}
+        self.stations = [
+            [self.index[p] for p in s["points"]] for s in _rows(document["spanwise_stations"])
+        ]
+        self.station_names = [s["name"] for s in _rows(document["spanwise_stations"])]
+        self._station_le_diameter = [
+            s.get("le_diameter") for s in _rows(document["spanwise_stations"])
+        ]
+        self.segments = _rows(document["segments"])
+        self._point_on = {p["body"]: i for i, p in enumerate(points) if p["body"] is not None}
+
+    # -- wing -------------------------------------------------------------
+    @property
+    def leading_edge(self) -> list[int]:
+        """First node of every station, +y to -y."""
+        return [s[0] for s in self.stations]
+
+    @property
+    def trailing_edge(self) -> list[int]:
+        return [s[-1] for s in self.stations]
+
+    @property
+    def is_wireframe(self) -> bool:
+        """No tubes: a reduced wireframe, whose wing is spring members."""
+        return not (self.document.get("tubes") or {}).get("data")
+
+    @property
+    def tubes(self) -> list[dict]:
+        """``{name, nodes: (a, b), diameter, pressure}`` per tube [m, Pa]."""
+        return [
+            {
+                "name": t["name"],
+                "nodes": tuple(self._point_on[b] for b in t["bodies"]),
+                "diameter": float(t["diameter"]),
+                "pressure": float(t["pressure"]),
+            }
+            for t in _rows(self.document.get("tubes"))
+        ]
+
+    @property
+    def pressure_bar(self) -> float:
+        pressures = {t["pressure"] for t in self.tubes}
+        if len(pressures) != 1:
+            raise ValueError(f"tubes at {len(pressures)} different pressures")
+        return pressures.pop() / BAR_TO_PA
+
+    def _tube_pairs(self):
+        return {frozenset(t["nodes"]): t for t in self.tubes}
+
+    @property
+    def struts(self) -> list[dict]:
+        """Stations a tube chain runs along: ``{name, nodes, diameters, le_diameter}``, +y first.
+
+        ``diameters`` are per element, leading edge first. ``le_diameter`` is
+        the leading edge's diameter at the strut (AWETrim's own station column),
+        None where the file does not state it.
+        """
+        pairs = self._tube_pairs()
+        struts = []
+        for name, section, le_diameter in zip(
+            self.station_names, self.stations, self._station_le_diameter
+        ):
+            links = [frozenset(p) for p in zip(section[:-1], section[1:])]
+            if links and all(link in pairs for link in links):
+                struts.append(
+                    {"name": name, "nodes": list(section),
+                     "diameters": [pairs[link]["diameter"] for link in links],
+                     "le_diameter": None if le_diameter is None else float(le_diameter)}
+                )
+        return struts
+
+    @property
+    def leading_edge_chain(self) -> list[int]:
+        """Node path along the leading-edge tube, +y to -y."""
+        pairs = self._tube_pairs()
+        le = self.leading_edge
+        for a, b in zip(le[:-1], le[1:]):
+            if frozenset((a, b)) not in pairs:
+                raise ValueError(f"no leading-edge tube between nodes {a} and {b}")
+        return list(le)
+
+    # -- bridle -----------------------------------------------------------
+    @property
+    def bridle_segments(self) -> list[dict]:
+        """Bridle segments in document order -- the order VSM's line system
+        and every reader's element list use (a pulley's two arms adjacent)."""
+        return [s for s in self.segments if s.get("line") is not None]
+
+    @property
+    def bridle(self) -> list[dict]:
+        """Bridle lines connection by connection, a pulley as ONE element.
+
+        ``{name (the line), nodes ([a, b] or [a, sheave, b]), rest_length (the
+        whole rope), diameter, tape_width, material, linktype, segments}``.
+        """
+        arms = {}
+        for pulley in _rows(self.document.get("pulleys")):
+            first, second = pulley["segments"]
+            arms[first], arms[second] = second, None
+        by_name = {s["name"]: s for s in self.segments}
+        elements = []
+        for seg in self.bridle_segments:
+            if seg["name"] in arms and arms[seg["name"]] is None:
+                continue
+            nodes = [self.index[p] for p in seg["points"]]
+            rest = float(seg["rest_length"])
+            names = [seg["name"]]
+            other = arms.get(seg["name"])
+            if other is not None:
+                second = by_name[other]
+                a, b = (self.index[p] for p in second["points"])
+                if a != nodes[1]:
+                    raise ValueError(f"pulley arms {seg['name']} / {other} do not meet")
+                nodes.append(b)
+                rest += float(second["rest_length"])
+                names.append(other)
+            elements.append(
+                {
+                    "name": seg["line"],
+                    "nodes": nodes,
+                    "rest_length": rest,
+                    "diameter": float(seg["diameter"]),
+                    "tape_width": seg.get("tape_width"),
+                    "material": seg["material"],
+                    "linktype": seg["linktype"],
+                    "segments": names,
+                }
+            )
+        return elements
+
+    def bridle_line_system(self, positions=None) -> list[list]:
+        """``[p1, p2, diameter]`` per bridle segment, VSM's ``bridle_line_system``."""
+        pos = self.positions if positions is None else np.asarray(positions, dtype=float)
+        system = []
+        for seg in self.bridle_segments:
+            a, b = seg["points"]
+            system.append(
+                [pos[self.index[a]].copy(), pos[self.index[b]].copy(), float(seg["diameter"])]
+            )
+        return system
+
+    # -- mass and the solver model ------------------------------------------
+    def masses(self, kcu_mass: float = 0.0) -> np.ndarray:
+        """Nodal masses by awesIO's rule, plus the KCU's from ``system.yaml``."""
+        masses = nodal_masses(self.document)
+        masses[self.kcu] += float(kcu_mass)
+        return masses
+
+    def resolved(self, kcu_mass: float = 0.0) -> tuple:
+        """The full model's solver arrays (``read_struc_geometry_yaml.main``'s tuple)."""
+        if self.is_wireframe:
+            raise ValueError("a wireframe has no full model; use wireframe_dict()")
+        return from_awesio(self.document, kcu_mass=kcu_mass)
+
+    def wireframe_dict(self) -> dict:
+        """The PSM-format dict ``wireframe.structural_geometry_io`` reads."""
+        return wireframe_from_awesio(self.document)
+
+    # -- edited copies ----------------------------------------------------
+    def with_positions(self, positions) -> "Structure":
+        """A copy with every point (and the body it rides on) moved to ``positions``."""
+        positions = np.asarray(positions, dtype=float)
+        document = copy.deepcopy(self.document)
+        column = document["points"]["headers"].index("pos_ENU")
+        for row, pos in zip(document["points"]["data"], positions):
+            row[column] = [float(v) for v in pos + self.origin]
+        bodies = document.get("bodies") or {}
+        if bodies.get("data"):
+            column = bodies["headers"].index("pos_ENU")
+            for row in bodies["data"]:
+                row[column] = [float(v) for v in positions[self._point_on[row[0]]] + self.origin]
+        return Structure(document)
+
+    def with_rest_lengths(self, rest_lengths: dict) -> "Structure":
+        """A copy with the named segments' rest lengths replaced [m]."""
+        document = copy.deepcopy(self.document)
+        column = document["segments"]["headers"].index("rest_length")
+        for row in document["segments"]["data"]:
+            if row[0] in rest_lengths:
+                row[column] = float(rest_lengths[row[0]])
+        return Structure(document)
+
+    def write(self, path) -> None:
+        document = copy.deepcopy(self.document)
+        document["metadata"]["connectivity_sha"] = connectivity_sha(document)
+        write_awesio(_as_rows(document), path)
+
+
+def _as_rows(document: dict) -> dict:
+    """Mark every table's headers, units and rows for one-line output."""
+    for value in document.values():
+        if isinstance(value, dict) and {"headers", "units", "data"} <= set(value):
+            value["headers"] = _Row(value["headers"])
+            value["units"] = _Row(value["units"])
+            value["data"] = [_Row(row) for row in value["data"]]
+    return document
+
+
+# -- the wireframe ----------------------------------------------------------
+def wireframe_to_awesio(psm: dict, *, name: str = "kite_wireframe", height_kcu: float = 0.0) -> dict:
+    """The awesIO document of a PSM-format wireframe (``wireframe.reduce_fem``'s
+    output, or a deformed snapshot).
+
+    Ribs (``wing_particles`` ``2r+1`` front, ``2r+2`` rear) are the stations.
+    Wing members are segments of material ``wireframe_member`` (diameter 0)
+    with their ``stiffness``, ``damping`` and ``mass`` as tool columns; their
+    mass, half to each end, and the pulley masses are the points' extra mass,
+    so an awesIO reader weighs the wireframe's wing as the PSM reader does.
+    """
+    from awetrim.aerostructural.utils import bridle_connection_rest_lengths
+
+    positions = {0: np.asarray(psm.get("bridle_point_node", [0, 0, 0]), dtype=float)}
+    wing_ids = []
+    for key in ("wing_particles", "bridle_particles"):
+        for row in psm.get(key, {}).get("data", []):
+            positions[int(row[0])] = np.asarray(row[1:4], dtype=float)
+            if key == "wing_particles":
+                wing_ids.append(int(row[0]))
+    n_nodes = max(positions) + 1
+    if sorted(positions) != list(range(n_nodes)):
+        raise ValueError("wireframe node ids are not contiguous from 0")
+    origin = np.array([0.0, 0.0, float(height_kcu)])
+
+    extra = np.zeros(n_nodes)
+    member_rows = []
+    element_headers = psm["wing_elements"]["headers"]
+    elements = {row[0]: dict(zip(element_headers, row)) for row in psm["wing_elements"]["data"]}
+    for conn in psm["wing_connections"]["data"]:
+        props = elements[conn[0]]
+        a, b = int(conn[1]), int(conn[2])
+        extra[a] += float(props["m"]) / 2.0
+        extra[b] += float(props["m"]) / 2.0
+        member_rows.append(
+            [conn[0], _Row([_name(a), _name(b)]), float(props["l0"]), 0.0,
+             WIREFRAME_MEMBER_MATERIAL, None, props["linktype"], None,
+             float(props["k"]), float(props["c"]), float(props["m"])]
+        )
+
+    lines = {row[0]: dict(zip(psm["bridle_lines"]["headers"][1:], row[1:]))
+             for row in psm["bridle_lines"]["data"]}
+    overrides = bridle_connection_rest_lengths(psm)
+    materials = set()
+    bridle_rows, pulley_rows = [], []
+    for conn_row, conn in enumerate(psm["bridle_connections"]["data"]):
+        line_name = conn[0]
+        nodes = [int(n) for n in conn[1:] if n is not None]
+        line = lines[line_name]
+        materials.add(line["material"])
+        rope = float(overrides.get(conn_row, line["l0"]))
+        width = line.get("w")
+        tail = [line_name, line["linktype"], None if width in (None, "") else float(width),
+                None, None, None]
+        if len(nodes) == 2:
+            bridle_rows.append(
+                [f"{line_name}_{conn_row}", _Row(_name(n) for n in nodes), rope,
+                 float(line["d"]), line["material"], *tail]
+            )
+            continue
+        ci, cj, ck = nodes
+        arm_a = np.linalg.norm(positions[ci] - positions[cj])
+        arm_b = np.linalg.norm(positions[cj] - positions[ck])
+        names = (f"{line_name}_{conn_row}_a", f"{line_name}_{conn_row}_b")
+        lengths = (rope * arm_a / (arm_a + arm_b), rope * arm_b / (arm_a + arm_b))
+        for seg_name, (p, q), length in zip(names, ((ci, cj), (cj, ck)), lengths):
+            bridle_rows.append(
+                [seg_name, _Row([_name(p), _name(q)]), float(length), float(line["d"]),
+                 line["material"], *tail]
+            )
+        pulley_rows.append([f"{line_name}_{conn_row}", _Row(names)])
+        extra[cj] += float(psm.get("pulley_mass", 0.0))
+
+    fixed = {int(i) for i in psm.get("fixed_point_indices", [0])}
+    point_rows = [
+        [_name(i), i in fixed, None, _vec(positions[i] + origin), float(extra[i])]
+        for i in range(n_nodes)
+    ]
+    wing_ids.sort()
+    stations = [
+        [f"rib_{r + 1}", WING, _Row([_name(wing_ids[2 * r]), _name(wing_ids[2 * r + 1])])]
+        for r in range(len(wing_ids) // 2)
+    ]
+    material_rows = [
+        [m, "linear", {"density": float(psm[m]["density"]),
+                       "youngs_modulus": float(psm[m]["youngs_modulus"])}]
+        for m in sorted(materials)
+    ]
+    material_rows.append(
+        [WIREFRAME_MEMBER_MATERIAL, "linear", {"density": 0.0, "youngs_modulus": 0.0}]
+    )
+    tool = {"kcu_point": "0", "pulley_mass": float(psm.get("pulley_mass", 0.0))}
+    for key in ("reduction", "billowing"):
+        if key in psm:
+            tool[key] = copy.deepcopy(psm[key])
+    document = {
+        "metadata": {
+            "name": name, "description": "", "note": "", "awesIO_version": AWESIO_VERSION,
+            "schema": SCHEMA, "n_points": n_nodes, "connectivity_sha": "",
+        },
+        "materials": _table(["name", "law", "parameters"], ["-", "-", "-"], material_rows),
+        "points": _table(
+            ["name", "fixed", "body", "pos_ENU", "extra_mass"], ["-", "-", "-", "m", "kg"], point_rows
+        ),
+        "segments": _table(
+            ["name", "points", "rest_length", "diameter", "material", "line", "linktype",
+             "tape_width", "stiffness", "damping", "mass"],
+            ["-", "-", "m", "m", "-", "-", "-", "m", "N/m", "N*s/m", "kg"],
+            member_rows + bridle_rows,
+        ),
+        "spanwise_stations": _table(["name", "wing", "points"], ["-", "-", "-"], stations),
+        "pulleys": _table(["name", "segments"], ["-", "-"], pulley_rows),
+        "wings": _table(
+            ["name", "pos_ENU", "Q_KA2ENU"], ["-", "m", "-"],
+            [[WING, _vec(positions[0] + origin), _Row([1.0, 0.0, 0.0, 0.0])]],
+        ),
+        "awetrim": tool,
+    }
+    document["metadata"]["connectivity_sha"] = connectivity_sha(document)
+    return document
+
+
+def wireframe_from_awesio(document: dict) -> dict:
+    """The PSM-format dict of a wireframe document (inverse of :func:`wireframe_to_awesio`)."""
+    structure = Structure(document)
+    if not structure.is_wireframe:
+        raise ValueError("the document has tubes: it is a full model, not a wireframe")
+    pos = structure.positions
+    wing_ids = sorted({n for s in structure.stations for n in s})
+    if structure.kcu != 0 or wing_ids != list(range(1, len(wing_ids) + 1)):
+        raise ValueError("a wireframe numbers the KCU 0 and its wing nodes 1..2R")
+    bridle = structure.bridle
+    bridle_ids = sorted(
+        {n for e in bridle for n in e["nodes"]} - set(wing_ids) - {structure.kcu}
+    )
+    members = [s for s in structure.segments if s.get("line") is None]
+    line_rows, connections, overrides, first_rest = {}, [], [], {}
+    for row_index, element in enumerate(bridle):
+        name = element["name"]
+        if name not in line_rows:
+            row = [name, element["rest_length"], element["diameter"], element["material"],
+                   element["linktype"]]
+            if element.get("tape_width") is not None:
+                row.append(float(element["tape_width"]))
+            line_rows[name] = row
+            first_rest[name] = element["rest_length"]
+        elif abs(first_rest[name] - element["rest_length"]) > 1e-12:
+            overrides.append([row_index, element["rest_length"]])
+        connections.append([name, *element["nodes"]])
+    headers = ["name", "l0", "d", "material", "linktype"]
+    if any(len(r) == 6 for r in line_rows.values()):
+        headers.append("w")
+        for r in line_rows.values():
+            if len(r) == 5:
+                r.append(None)
+    materials = {e["material"] for e in bridle}
+    psm = {
+        "bridle_point_node": [float(v) for v in pos[0]],
+        "pulley_mass": structure.pulley_mass,
+        **{m: {**structure.materials[m]["parameters"], "damping_per_stiffness": 0.0}
+           for m in sorted(materials)},
+        "fixed_point_indices": list(structure.fixed),
+        "wing_particles": {"headers": ["id", "x", "y", "z"],
+                           "data": [[n, *map(float, pos[n])] for n in wing_ids]},
+        "wing_connections": {"headers": ["name", "ci", "cj"],
+                             "data": [[m["name"], *(structure.index[p] for p in m["points"])]
+                                      for m in members]},
+        "wing_elements": {"headers": ["name", "l0", "k", "c", "m", "linktype"],
+                          "data": [[m["name"], float(m["rest_length"]), float(m["stiffness"]),
+                                    float(m["damping"]), float(m["mass"]), m["linktype"]]
+                                   for m in members]},
+        "bridle_particles": {"headers": ["id", "x", "y", "z"],
+                             "data": [[n, *map(float, pos[n])] for n in bridle_ids]},
+        "bridle_connections": {"headers": ["name", "ci", "cj", "ck"], "data": connections},
+        "bridle_lines": {"headers": headers, "data": list(line_rows.values())},
+    }
+    if overrides:
+        from awetrim.aerostructural.utils import BRIDLE_CONNECTION_REST_LENGTHS
+
+        psm[BRIDLE_CONNECTION_REST_LENGTHS] = {"headers": ["row", "l0"], "data": overrides}
+    for key in ("reduction", "billowing"):
+        if key in (document.get("awetrim") or {}):
+            psm[key] = copy.deepcopy(document["awetrim"][key])
+    return psm
+
+
 def write_awesio(document: dict, path: str | Path) -> None:
     """Write ``document`` as YAML, one table row per line."""
     with open(path, "w", encoding="utf-8") as handle:
         yaml.dump(document, handle, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=10_000)
+
+
+def convert_file(source, target, *, name=None, description="", note="") -> Structure:
+    """Convert a retired-format structure file (FEM geometry or PSM wireframe) to awesIO."""
+    with open(source, "r", encoding="utf-8") as handle:
+        legacy = yaml.safe_load(handle)
+    if _is_awesio(legacy):
+        raise ValueError(f"{source} is already an awesIO document")
+    name = name or Path(source).parent.name
+    if "strut_tubes" in legacy:
+        document = to_awesio(legacy, name=name, description=description, note=note)
+    elif "wing_elements" in legacy:
+        document = wireframe_to_awesio(legacy, name=name)
+        document["metadata"].update(description=description, note=note)
+    else:
+        raise ValueError(f"{source}: not a known AWETrim structure format")
+    write_awesio(document, target)
+    return Structure(document)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Convert an AWETrim structure file (FEM geometry or PSM wireframe) to awesIO."
+    )
+    parser.add_argument("source")
+    parser.add_argument("target")
+    parser.add_argument("--name")
+    args = parser.parse_args()
+    convert_file(args.source, args.target, name=args.name)

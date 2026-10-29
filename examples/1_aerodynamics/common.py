@@ -41,7 +41,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config-folder",
         default=str(DEFAULT_CONFIG_FOLDER),
-        help="Config folder containing system.yaml, aero_geometry.yaml, and optional struc_geometry_FEM_full.yaml (default: data/LEI-V3-KITE).",
+        help="Config folder containing system.yaml, aero_geometry.yaml, and optional structure.yml (default: data/LEI-V3-KITE).",
     )
     parser.add_argument(
         "--no-struc-geometry",
@@ -53,7 +53,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Aerostructural results case directory (must contain "
-            "aero_geometry.yaml and struc_geometry.yaml). When set, the deformed "
+            "aero_geometry.yaml and structure.yml). When set, the deformed "
             "geometries from this directory are used in place of the ones in "
             "--config-folder. system.yaml (mass/inertia/CoG/tether) is still "
             "read from --config-folder and is NOT recomputed from the deformed "
@@ -193,14 +193,14 @@ def _merge_aero_and_structural_geometry(
     struc_geometry_path: Path,
     csv_root: Path | None = None,
 ) -> dict:
-    """Load profiles from aero_geometry.yaml and geometry from struc_geometry.yaml.
+    """Load profiles from aero_geometry.yaml (the body's VSM config).
 
     Returns a config dict suitable for VSM's BodyAerodynamics.instantiate with:
     - wing_airfoils from aero_geometry.yaml (profiles/polars)
     - wing_sections from aero_geometry.yaml (wing definition stays aerodynamic)
 
-    The structural file is still used separately via `bridle_path` and for
-    physical properties in `load_config_from_folder`.
+    The structure file is used separately: for the bridle lines in
+    `build_body` and for physical properties in `load_config_from_folder`.
 
     ``csv_root`` is the directory used to resolve relative ``csv_file_path``
     entries. Defaults to the aero_geometry.yaml parent; pass the original
@@ -214,7 +214,7 @@ def _merge_aero_and_structural_geometry(
         aero_config = yaml.safe_load(f)
 
     # Structural geometry is intentionally not merged into wing_sections here.
-    # The VSM body already receives the structural file via `bridle_path`.
+    # The VSM body receives the structure's bridle lines in `build_body`.
     merged_config = dict(aero_config)
 
     # Resolve CSV file paths to absolute paths
@@ -234,8 +234,8 @@ def load_config_from_folder(
     Expected files:
     - system.yaml        (or system.yml) — contains physical properties (mass, inertia, CoG)
     - aero_geometry.yaml — VSM aerodynamic geometry (profiles, wing sections)
-    - struc_geometry_FEM_full.yaml (optional) — structural geometry (bridles, node
-      masses); in a deformed results dir its snapshot, struc_geometry.yaml
+    - structure.yml (optional) — the awesIO structure (bridles, node masses);
+      in a deformed results dir its snapshot, also structure.yml
 
     Property source selection:
     - If a structural geometry EXISTS: aggregate (wing+bridle+KCU) mass/CG/inertia is
@@ -291,7 +291,7 @@ def load_config_from_folder(
         aero_config = yaml.safe_load(f)
 
     # Optional structural geometry (also from the geometry folder): the kite's
-    # FEM file, or a deformed snapshot when ``deformed_from`` is a results dir.
+    # structure.yml, or a deformed snapshot when ``deformed_from`` is a results dir.
     struc_geometry_path = find_struc_geometry(geom_folder) if use_struc_geometry else None
 
     # Select property source based on whether struc_geometry exists.
@@ -300,9 +300,7 @@ def load_config_from_folder(
     if struc_geometry_path is not None:
         # Full kite (wing + bridle + KCU): the aggregate mass/CG/inertia is derived
         # from the structural node distribution, not stored in system.yaml.
-        with open(struc_geometry_path, "r") as f:
-            struc_geometry = yaml.safe_load(f)
-        aggregate = compute_kite_aggregate(struc_geometry, system_config)
+        aggregate = compute_kite_aggregate(struc_geometry_path, system_config)
         properties = {
             "mass": float(aggregate["mass"]),
             "inertia": aggregate["inertia_tensor"],
@@ -376,23 +374,20 @@ def build_body(args: argparse.Namespace) -> tuple[Any, dict[str, Any]]:
             n_panels=args.n_panels,
             file_path=tmp_path,
             spanwise_panel_distribution=args.spanwise_panel_distribution,
-            bridle_path=(
-                config["struc_geometry_path"] if config["struc_geometry_path"] else None
-            ),
             **vsm_body_kwargs(),
         )
     finally:
         # Clean up temporary file
         Path(tmp_path).unlink()
 
-    # Flat steering/depower tapes are stored as an AREA-equivalent circle,
-    # which is right for mass/EA and meaningless for drag -- substitute the
-    # drag-equivalent diameters (awetrim.aerodynamics.line_drag).
+    # The bridle lines come from the structure, the flat steering/depower
+    # tapes with their drag-equivalent diameters: the structure stores them as
+    # an AREA-equivalent circle, right for mass/EA and meaningless for drag
+    # (awetrim.aerodynamics.line_drag).
     if config["struc_geometry_path"]:
-        from awetrim.aerodynamics.line_drag import apply_bridle_drag_diameters
+        from awetrim.aerodynamics.line_drag import attach_bridle_lines
 
-        with open(config["struc_geometry_path"], "r", encoding="utf-8") as f:
-            apply_bridle_drag_diameters(body, yaml.safe_load(f))
+        attach_bridle_lines(body, config["struc_geometry_path"])
 
     # Return both body and properties for use in scripts
     properties = {

@@ -119,7 +119,11 @@ src/awetrim/aerostructural/
                                    total_aero_force_vec, CL/CD only with their
                                    area)
   tracking.py                      setup_tracking_arrays, update_tracking_arrays
-  utils.py                         rotate_geometry, calculate_cg, calculate_inertia, load_yaml
+  utils.py                         rotate_geometry, calculate_cg, calculate_inertia, load_yaml,
+                                   resolve_kcu_mass (system.yaml, then config
+                                   kcu.mass / kcu_mass), resolve_structure (any
+                                   structure -> Structure.resolved with that KCU
+                                   mass; warns on strut_padding)
   symmetry.py                      check_mirror_symmetry / warn_if_asymmetric: both
                                    geometry readers WARN when the geometry they
                                    return is not mirror-symmetric about y = 0
@@ -179,7 +183,10 @@ src/awetrim/aerostructural/
                                    raises (it used to fall back to uniform
                                    weights); relative paths resolve against the
                                    project root (case.resolve_config_paths).
-    read_struc_geometry_yaml.py    Parse struc_geometry YAML (strut tubes, LE tubes)
+    read_struc_geometry_yaml.py    Importer of the RETIRED struc_geometry_FEM_full
+                                   format only (used by awesio_structure.to_awesio);
+                                   the solvers get its tuple from
+                                   utils.resolve_structure -> Structure.resolved
     awesio_structure.py            The geometry as an awesIO structure document
                                    (structure_schema.yml, awesIO 0.1.0).
                                    to_awesio writes the reader's RESOLVED model
@@ -215,7 +222,9 @@ src/awetrim/aerostructural/
                                    stiffness-bound helpers
                                    (modulus_stiffness_ceiling,
                                    adapt_stiffnesses), moved across unchanged.
-    structural_geometry_io.py      Parse struc_geometry.yaml -> StructuralGeometry arrays
+    structural_geometry_io.py      The wireframe's internal PSM-format dict
+                                   (Structure.wireframe_dict()) -> StructuralGeometry
+                                   arrays. Reads no file.
     actuation.py                   update_steering_tape_actuation, update_power_tape_actuation
     coupled_solver_qsm.py          The PSM production driver
     driver.py                      solve_deformation: one whole wireframe case
@@ -224,14 +233,17 @@ src/awetrim/aerostructural/
                                    Was in examples/2_aerostructural/
                                    run_simulation_PSM.py until 2026-10-07.
                                    build_case / solve_deformation take a
-                                   PSM-format struc_geometry_path (a deformed
-                                   snapshot); WITHOUT one they are
+                                   wireframe structure file (awesIO, a deformed
+                                   snapshot; a retired PSM file is converted by
+                                   load_structure) and keep it as
+                                   WireframeCase.structure; WITHOUT one they are
                                    build_case_reduced_fem /
                                    solve_deformation_reduced_fem (the kite's
                                    only geometry is the FEM file since
                                    2026-10-29). solve_deformation_reduced_fem: the same on
-                                   the wireframe REDUCED from
-                                   struc_geometry_FEM_full.yaml, flying the full
+                                   the wireframe REDUCED from the kite's
+                                   structure.yml (written per case as awesIO
+                                   structure_wireframe.yml), flying the full
                                    geometry's aero mesh -- the public demo, so
                                    it and Billow differ only in the structure.
                                    Its case is build_case_reduced_fem (also the
@@ -267,8 +279,16 @@ src/awetrim/aerostructural/
                                    elongation bound (it only raises k, so a
                                    reused structure ratchets): pin the modulus
                                    and set structural_pss.update_stiffness false
-    reduce_fem.py                  reduce_fem_geometry: FEM_full -> PSM-format
-                                   wireframe. One rib per strut, front/rear
+    reduce_fem.py                  reduce_fem_geometry: the full model as a
+                                   Structure (awesIO structure.yml) -> the
+                                   wireframe's PSM-format dict. Strut diameter
+                                   = length-weighted mean of its tube elements;
+                                   LE diameter at a rib = the strut station's
+                                   le_diameter column (else the mean of the LE
+                                   elements meeting it); masses default to
+                                   Structure.masses(); a node equidistant from
+                                   two mirrored ribs is split between them.
+                                    One rib per strut, front/rear
                                    node = the bridle attachments (x/c 0.01 /
                                    0.90; tip: the a5 LE node and br_5 at 0.77);
                                    per-strut line fans -> one *_equiv line
@@ -308,8 +328,12 @@ src/awetrim/aerostructural/
                                    pulleys, inflatable Timoshenko tube beams,
                                    wrinkling CST membrane canopy) to the same
                                    call contract. Reads the SAME arrays
-                                   coupled/read_struc_geometry_yaml.main
-                                   returns, so one geometry reader serves both.
+                                   Structure.resolved returns (via
+                                   utils.resolve_structure), so one geometry
+                                   reader serves both. instantiate /
+                                   relax_bridle_nodes / build_frames /
+                                   beam_chains take the Structure (its fixed
+                                   and leading_edge_chain).
                                    See "Billow backend" below.
                                    relax_bridle_nodes = instantiate's bridle
                                    relaxation on its own (any model reduced from
@@ -372,10 +396,15 @@ that path carry the defect.
 ## Core Data Flow
 
 ```
-struc_geometry_FEM_full.yaml
-  └─ wireframe/reduce_fem.reduce_fem_geometry() → PSM-format wireframe
-       (or a deformed snapshot, struc_geometry.yaml)
+structure.yml (awesIO; coupled/awesio_structure.load_structure → Structure)
+  └─ Billow full: utils.resolve_structure() → Structure.resolved(kcu_mass)
+  └─ wireframe/reduce_fem.reduce_fem_geometry() → PSM-format dict (in memory;
+       written per case as awesIO structure_wireframe.yml; a deformed snapshot
+       is a wireframe structure.yml → Structure.wireframe_dict())
   └─ wireframe/structural_geometry_io.main() → StructuralGeometry (nodes, connectivity, rest_lengths, …)
+  └─ VSM bridle: aerodynamics/line_drag.attach_bridle_lines(body, structure)
+       = Structure.bridle_line_system() + the tape drag diameters (VSM no
+       longer parses the file: instantiate is called WITHOUT bridle_path)
 
 aero_geometry.yaml
   └─ aerodynamic_vsm.initialize() → (body_aero, vsm_solver, initial_polar_data)
@@ -387,8 +416,8 @@ Fixed-point loop (wireframe/coupling.WireframeQsmCoupler.solve,
      + aerodynamic_vsm.rebuild_bridle_line_system(body, struc_nodes, specs):
      update_from_points refreshes WINGS only, so the VSM bridle-line drag
      segments are rebuilt from the live struc_nodes per aero call (specs =
-     aerodynamic_vsm.parse_bridle_line_specs(struc_geometry), the same parse
-     VSM's instantiate(bridle_path=...) does but with node indices). Without
+     aerodynamic_vsm.parse_bridle_line_specs(structure), the same segments
+     Structure.bridle_line_system gives, with node indices). Without
      this the coupled trim flies the INITIAL symmetric bridle for the whole
      loop; on actuated shapes the missing asymmetric bridle drag mis-trims
      roll (measured: cmx ~0.075, phi_a off by ~0.8 deg at 0.2 m steering
@@ -540,7 +569,10 @@ Four things the adapter has to do that are not obvious:
   mesh properties — see the circulation-loop note below. Compare meshes on a
   base-loop or guarded solve, where the two agree to 1 mm on span (7.9466
   against 7.9453). `legacy` is kept bit-exact to reproduce stored FEM results —
-  set `strut_padding: legacy` for that.
+  set `strut_padding: legacy` for that. Since 2026-10-29 the mesh is IN the
+  awesIO structure.yml (written with bisect_longest), so the config key is
+  ignored with a warning (`utils.resolve_structure`); a legacy mesh needs a
+  file converted with `to_awesio(..., strut_padding="legacy")`.
   One more trap: `initialize_particles` appends the YAML's OWN `node_indices`
   list to `strut_indices` and the padding loop inserts into it. That aliasing
   is load-bearing — it is how the padding nodes reach
@@ -732,7 +764,10 @@ inertial+gravity 1.1 N m, bridle drag 325.9 -> **15.9 N m**, net swing
 0.763 -> **0.038 deg**. Fixing this MOVES every stored Billow/FEM coupled
 result.
 
-**And the VSM's bridle now deforms with the kite (2026-09-12).**
+**And the VSM's bridle now deforms with the kite (2026-09-12).** (Since
+2026-10-29 the body is built without `bridle_path` and given
+`Structure.bridle_line_system()` by `line_drag.attach_bridle_lines`; the
+mechanism below is unchanged.)
 `BodyAerodynamics.instantiate(bridle_path=...)` bakes the segments in as
 COORDINATES and `update_from_points` refreshes the wings only, so the trim went
 on charging bridle drag to the BUILT shape while the structure (and the drag
@@ -1169,6 +1204,13 @@ there and each connection in the optional top-level block
 row, l0], ...]}`, `utils.BRIDLE_CONNECTION_REST_LENGTHS`), which both geometry
 readers apply (`utils.bridle_connection_rest_lengths`). Pulley ropes keep their
 input row: never actuated, and the backends report their arms differently.
+Since 2026-10-29 the snapshot is an awesIO `structure.yml`
+(`case.SNAPSHOT_STRUC_GEOMETRY_FILENAME`, written by `save_geometry_snapshot`
+through `Structure.write`): `build_deformed_struc_geometry(structure, nodes,
+bridle_rest_lengths)` returns a `Structure` (`with_positions` +
+`with_rest_lengths`), and since every segment has its own `rest_length` the
+`bridle_connection_rest_lengths` block survives only in the wireframe's
+in-memory PSM dict.
 
 **Trim-state history / unloaded-branch reference (2026-09-10).** The coupled
 solver's meta now carries `opt_x_history` — the trim state
@@ -1396,7 +1438,7 @@ Output goes to `results/aerostructural/<kite_name>/<case_folder>/sim_output.h5` 
 
 ## Required Developer Checks
 
-- Read `structural_geometry_io.main()` before changing how struc_geometry.yaml is parsed; the node index ordering (odd = LE, even = TE) and pulley dict format `[cj, ck, l0_cj_ck, l0_ci_cj, ci]` are load-bearing.
+- Read `coupled/awesio_structure.py` before changing how a structure file is read (`Structure`, `from_awesio`, `wireframe_to_awesio` / `wireframe_from_awesio`), and `structural_geometry_io.main()` before changing the wireframe's internal PSM dict; there the node index ordering (odd = LE, even = TE) and pulley dict format `[cj, ck, l0_cj_ck, l0_ci_cj, ci]` are load-bearing.
 - Any change to `WireframeQsmCoupler` must keep `QsmCouplingRequest` / `QsmCouplingResult` stable; the protocol tests check these fields.
 - Shared case helpers live in `awetrim.aerostructural.case` — add new shared defaults to `CONFIG_DEFAULTS` there, not as literals in individual scripts. Driver logic belongs in `wireframe/driver.py` / `billow/driver.py`; the run scripts only set inputs.
 

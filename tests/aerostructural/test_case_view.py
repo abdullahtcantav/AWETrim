@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from awetrim.aerostructural import case_view
+from awetrim.aerostructural.coupled.awesio_structure import SCHEMA, Structure
 
 
 def test_wing_triangles_two_per_bay():
@@ -20,9 +21,28 @@ def test_wing_triangles_rejects_unequal_edges():
 
 
 def test_classify_lines_kinds_and_names():
-    geometry = {"bridle_connections": {"data": [
-        ["main", 0, 7], ["power", 0, 8], ["steer", 8, 9], ["pul", 7, 1, 2],
-    ]}}
+    def table(headers, rows):
+        return {"headers": headers, "units": ["-"] * len(headers), "data": rows}
+
+    segments = [
+        ("main_0", ["0", "7"], "main"), ("power_1", ["0", "8"], "power"),
+        ("steer_2", ["8", "9"], "steer"),
+        ("pul_3_a", ["7", "1"], "pul"), ("pul_3_b", ["1", "2"], "pul"),
+    ]
+    geometry = Structure({
+        "metadata": {"schema": SCHEMA},
+        "points": table(
+            ["name", "fixed", "body", "pos_ENU", "extra_mass"],
+            [[str(i), i == 0, None, [0.0, 0.0, float(i)], 0.0] for i in range(10)],
+        ),
+        "wings": table(["name", "pos_ENU", "Q_KA2ENU"], [["wing", [0.0] * 3, [1, 0, 0, 0]]]),
+        "spanwise_stations": table(["name", "wing", "points"], [["rib", "wing", ["1", "2"]]]),
+        "segments": table(
+            ["name", "points", "rest_length", "diameter", "material", "line"],
+            [[name, pts, 1.0, 0.002, "dyneema", line] for name, pts, line in segments],
+        ),
+        "pulleys": table(["name", "segments"], [["pul_3", ["pul_3_a", "pul_3_b"]]]),
+    })
     connectivity = [[1, 2], [0, 7], [0, 8], [8, 9], [7, 1], [1, 2]]
     kinds, names = case_view.classify_lines(
         connectivity,

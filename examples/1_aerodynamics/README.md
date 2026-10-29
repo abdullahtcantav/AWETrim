@@ -8,7 +8,7 @@ annotated reference.
 |------|-------------------|
 | `system.yaml` | Masses, inertia, KCU, tether and winch, in the [awesIO](https://github.com/awegroup/awesIO) format; also selects the ROM file the trajectory steps fly |
 | `aero_geometry.yaml` | The wing for the Vortex Step Method: sections and airfoils |
-| `struc_geometry_FEM_full.yaml` | The structure for Billow: tubes, canopy, bridle lines and pulleys (step 2) |
+| `structure.yml` | The structure, in the [awesIO](https://github.com/awegroup/awesIO) structure format: tubes, canopy, bridle lines and pulleys. The bridle drag of every step reads it; Billow solves it (step 2) |
 | `as_config.yaml` | Solver settings of the coupled aerostructural simulation (step 2) |
 
 The examples here analyse the kite's aerodynamics before the heavier steps: one quasi-steady

@@ -14,6 +14,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+"""Importer of the RETIRED full-model geometry format (``struc_geometry_FEM_full.yaml``).
+
+The structural geometry is an awesIO structure document (``structure.yml``,
+read by ``awesio_structure.load_structure``; the solver arrays come from
+``Structure.resolved``). This reader is kept only to convert a file in the
+old authoring format -- whose strut padding, canopy chord nodes and tube
+masses it generates -- and is called by ``awesio_structure.to_awesio`` alone
+(``load_structure`` of an old file, ``convert_file``). New code must not call
+:func:`main`.
+"""
+
 import numpy as np
 import logging
 

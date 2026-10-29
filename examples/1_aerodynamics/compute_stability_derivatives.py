@@ -69,6 +69,7 @@ from awetrim.aerodynamics.cg_eom import static_slopes_summary
 from awetrim.aerodynamics.protocols import AxisDefinition
 from awetrim.system.williams_tether import WilliamsTether
 
+from awetrim.aerostructural.case import find_struc_geometry
 from awetrim.aerostructural.utils import load_sim_output
 from awetrim.identification.rigid_body_axes import (
     compute_rigid_body_axes,
@@ -107,15 +108,16 @@ _STATIC_CHANNELS = (
 
 
 def _load_rigid_body_axes_from_result(result_path: Path, struc_override: Path | None):
-    """Load RigidBodyAxes from a structural result directory or struc_geometry YAML.
+    """Load RigidBodyAxes from a structural result directory or structure file.
 
     Priority (same as plot_body_axes.py):
       1. struc_override (explicit --rigid-body-struc)
-      2. {result_path}/struc_geometry.yaml  (deformed, saved by save_geometry_snapshot)
-      3. HDF5 positions + data/{kite}/deformed_results/powered_2019/struc_geometry.yaml
-         (fallback, a PSM-format wireframe with the same node numbering)
+      2. the structure in {result_path} (``find_struc_geometry``: the deformed
+         structure.yml saved by save_geometry_snapshot, or a retired-format one)
+      3. HDF5 positions + data/{kite}/deformed_results/powered_2019/structure.yml
+         (fallback, a wireframe with the same node numbering)
 
-    Masses and the KCU mass come from the PSS initializer, which reads the
+    Masses are the structure's (awesIO's lumping) plus the KCU mass from the
     system.yaml beside the geometry (single source of the KCU mass).
     """
     result_path = result_path.resolve()
@@ -126,18 +128,18 @@ def _load_rigid_body_axes_from_result(result_path: Path, struc_override: Path | 
             struc_override.resolve()
         )
     else:
-        saved = case_dir / "struc_geometry.yaml"
-        if saved.exists():
+        saved = find_struc_geometry(case_dir)
+        if saved is not None:
             nodes, m_arr, le_indices, te_indices = load_psm_geometry(saved)
         else:
             h5 = case_dir / "sim_output.h5"
             if not h5.exists():
                 raise FileNotFoundError(
-                    f"No sim_output.h5 or struc_geometry.yaml in {case_dir}"
+                    f"No sim_output.h5 or structure.yml in {case_dir}"
                 )
             _, tracking = load_sim_output(h5)
             nodes = np.asarray(tracking["positions"][-1], dtype=float)
-            # infer struc_geometry from path layout
+            # infer the structure file from the path layout
             parts = case_dir.parts
             try:
                 ri = next(i for i, p in enumerate(parts) if p == "results")
@@ -149,15 +151,15 @@ def _load_rigid_body_axes_from_result(result_path: Path, struc_override: Path | 
                 project_root = Path(*parts[:ri])
                 kite_data = project_root / "data" / kite_name
                 fallback = (
-                    kite_data / "deformed_results" / "powered_2019" / "struc_geometry.yaml"
+                    kite_data / "deformed_results" / "powered_2019" / "structure.yml"
                 )
             except (StopIteration, IndexError):
                 raise FileNotFoundError(
-                    "Could not infer struc_geometry path from result layout."
+                    "Could not infer the structure path from result layout."
                 )
             if not fallback.exists():
                 raise FileNotFoundError(
-                    f"Fallback struc_geometry not found: {fallback}"
+                    f"Fallback structure not found: {fallback}"
                 )
             _, m_arr, le_indices, te_indices = load_psm_geometry(fallback)
 
@@ -258,7 +260,7 @@ def main() -> None:
         help=(
             "Name of a result case folder under --deformed-root "
             "(e.g. depower_p0000mm_steer_p0200mm). Uses that case's deformed "
-            "aero_geometry.yaml/struc_geometry.yaml for the trim (shortcut for "
+            "aero_geometry.yaml/structure.yml for the trim (shortcut for "
             "--deformed-from). Mass/inertia/CoG/tether still come from "
             "system.yaml in --config-folder."
         ),
@@ -322,7 +324,7 @@ def main() -> None:
         "--rigid-body-struc",
         type=Path,
         default=None,
-        help="struc_geometry.yaml to use with --rigid-body-result (auto-detected if omitted).",
+        help="structure.yml to use with --rigid-body-result (auto-detected if omitted).",
     )
     args = parser.parse_args()
     if args.no_gravity:
@@ -456,11 +458,21 @@ def main() -> None:
                     n_panels=args.n_panels,
                     file_path=_tmp_path,
                     spanwise_panel_distribution=args.spanwise_panel_distribution,
-                    bridle_path=props.get("struc_geometry_path"),
                     **vsm_body_kwargs(),
                 )
             finally:
                 Path(_tmp_path).unlink()
+            # The bridle lines VSM's bridle_path used to add: the structure's
+            # segments, at their structural diameters (no tape drag here, as
+            # before).
+            if props.get("struc_geometry_path"):
+                from awetrim.aerostructural.coupled.awesio_structure import (
+                    load_structure,
+                )
+
+                body._bridle_line_system = load_structure(
+                    props["struc_geometry_path"]
+                ).bridle_line_system()
             print(f"VSM body rebuilt from deformed aero_geometry: {deformed_aero_path}")
         else:
             print(
