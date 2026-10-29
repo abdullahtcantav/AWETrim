@@ -180,6 +180,24 @@ src/awetrim/aerostructural/
                                    weights); relative paths resolve against the
                                    project root (case.resolve_config_paths).
     read_struc_geometry_yaml.py    Parse struc_geometry YAML (strut tubes, LE tubes)
+    awesio_structure.py            The geometry as an awesIO structure document
+                                   (structure_schema.yml, awesIO 0.1.0).
+                                   to_awesio writes the reader's RESOLVED model
+                                   (padded, projected, canopy nodes generated:
+                                   awesIO forbids leaving them to a reader);
+                                   from_awesio returns main()'s exact tuple, so
+                                   consumers of it read awesIO unchanged (round
+                                   trip identical except masses); nodal_masses
+                                   is awesIO's mass rule (half of each segment,
+                                   equal face shares, + extra masses). Tube
+                                   nodes are one-point bodies, tubes are
+                                   breukels2011 with Billow's constants, pulleys
+                                   store per-ARM rest lengths (split by arm
+                                   length). Tool columns on segments: line,
+                                   linktype, tape_width; tool block awetrim
+                                   (kcu_point). Masses follow awesIO, not the
+                                   reader: same total, nodes differ by <= 58 g,
+                                   CG 6.5 mm on the LEI-V3.
 
   # -- Wireframe fidelity ----------------------------------------------------
   wireframe/                       (was pss/ until 2026-09-12)
@@ -332,6 +350,9 @@ explicitly in both adapters rather than inferred:
   two arms on the way into Billow's `PulleyKernel`, which takes the whole rope.
 * `read_struc_geometry_yaml` (full fidelity) stores the TOTAL on each arm, so
   `structural_billow` reads it off the first arm.
+* awesIO (`coupled/awesio_structure`) stores each ARM's rest length on its own
+  segment; the rope is their sum. `from_awesio` sums them back into the
+  reader's total-on-each-arm form.
 
 The physics is the same either way -- the rope shares one stretch -- but the
 bookkeeping is not: reading the total as an arm length puts every rope into
