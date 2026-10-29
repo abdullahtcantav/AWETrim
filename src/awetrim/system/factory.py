@@ -207,6 +207,31 @@ def load_rom_depower_validity(
     return float(min(band)), float(max(band))
 
 
+def intersect_steering_validity(hardware_limits: dict, abs_max: float | None) -> dict:
+    """Clip the optimizer's ``input_steering`` box to the ROM's
+    ``validity.input_steering_abs_max``, the largest |u_s| the steering chains
+    were identified on (LEI-V3: 0.20 m of tape, 0.143, inside the KCU's
+    0.175). Override through ``sim_parameters["opti_limits_override"]``.
+    """
+    if abs_max is None:
+        return hardware_limits
+    from awetrim.utils.defaults import DEFAULT_OPTI_LIMITS
+
+    lo, hi = hardware_limits.get("input_steering", DEFAULT_OPTI_LIMITS["input_steering"])
+    clipped = (max(float(lo), -float(abs_max)), min(float(hi), float(abs_max)))
+    if clipped[0] >= clipped[1]:
+        raise ValueError(
+            f"steering actuator range [{lo}, {hi}] does not overlap the ROM's "
+            f"validity |u_s| <= {abs_max}"
+        )
+    if clipped != (float(lo), float(hi)):
+        print(
+            f"  steering box [{lo}, {hi}] clipped to the ROM validity band -> "
+            f"[{clipped[0]:.4g}, {clipped[1]:.4g}]"
+        )
+    return {**hardware_limits, "input_steering": clipped}
+
+
 def apply_tension_floor(hardware_limits: dict, floor: float | None) -> dict:
     """Raise the optimizer's tether-tension lower bound to the ROM's floor.
 
@@ -456,11 +481,14 @@ def create_system_model_from_yaml(
                 cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
             ),
         )
+        validity = load_rom_validity(
+            cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
+        )
+        hardware_limits = intersect_steering_validity(
+            hardware_limits, validity.get("input_steering_abs_max")
+        )
         hardware_limits = apply_tension_floor(
-            hardware_limits,
-            load_rom_validity(
-                cfg, config_path=config_path, aero_yaml_path=aero_yaml_path
-            ).get("min_tether_force_n"),
+            hardware_limits, validity.get("min_tether_force_n")
         )
 
     tether = create_tether_from_config(

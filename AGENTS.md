@@ -201,6 +201,9 @@ strut-lever load transfer (`fidelity: wireframe` of `identification.yaml`):
 `identify_rom_aerostructural.py`, both reading `data/<kite>/identification.yaml`,
 writing under `results/<kite>/identification/<fidelity>/`; band 1.30-2.60 m,
 tension floor `validity.min_tether_force_n` 602 N, roll gain k(u_p) quadratic;
+the factory clips the optimizer's depower box to `validity.input_depower`,
+its steering box to `validity.input_steering_abs_max` (0.143, the 0.20 m the
+steering chains reached) and raises the tension bound to the floor;
 `fit.fidelities.wireframe.flight_match` records the model tapes that reproduce
 the 2019 reel-out / reel-in, to be updated whenever the match is redone) and
 `rom_config_aerostructural_flight_corrected.yaml` (STALE: the flight correction

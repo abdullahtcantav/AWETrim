@@ -83,7 +83,10 @@ components:
           range: [-0.175, 0.175]  # u_s [-]
           rate: [-0.145, 0.145]   # d(u_s)/dt [1/s] (2019 flight max ~29 kcu/s)
         depower:
-          range: [1.1, 2.1]      # power-tape length l_dp [m]
+          # power-tape length l_dp [m]: the band identified with gust margins
+          # (identification.yaml fit validity: 1.30 stall margin, 2.60 the
+          # depowered end), which the ROM's validity band also states
+          range: [1.30, 2.60]
           rate: [-0.2, 0.2]      # d(l_dp)/dt [m/s]
   tethers:
   - name: LEI-V3 Tether
