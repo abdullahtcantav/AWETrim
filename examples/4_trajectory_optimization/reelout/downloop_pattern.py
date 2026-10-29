@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from awetrim import SystemModel
+from awetrim.identification.controls import flight_depower_match
 from awetrim.environment.wind_factory import create_wind_model
 from awetrim.system.kite import Kite
 from awetrim.system.tether import RigidLumpedTether
@@ -70,9 +71,11 @@ INITIAL_GUESS = {
     "n_fit": 400,
     "s_init": 0.0,
     "s_final": 2.0 * np.pi,
-    "az_amp0": 0.3,
-    "beta0": 0.35,
-    "beta_amp0": 0.12,
+    # the figure generate_spline_config.py defaults to: inside the ROM's
+    # steering band (0.30 / 0.12 rad at 200 m needed more than the kite has)
+    "az_amp0": 0.65,
+    "beta0": 0.4,
+    "beta_amp0": 0.30,
     "downloops": True,  # downloop direction
 }
 
@@ -82,18 +85,22 @@ INITIAL_GUESS = {
 
 # Load configurations from YAML
 REELOUT_CONFIG, REELIN_CONFIG = load_cycle_config_from_yaml(CYCLE_CONFIG_PATH)
+INITIAL_GUESS_R0 = 300.0  # [m] the radius that figure is sized for
 
 if REGENERATE_INITIAL_GUESS:
     REELOUT_CONFIG["path_parameters"] = make_bspline_path_parameters_from_named_curve(
         spline_type="periodic",
-        r0=REELOUT_CONFIG["path_parameters"]["r0"],
+        r0=INITIAL_GUESS_R0,
         **INITIAL_GUESS,
     )
     REELOUT_CONFIG["sim_parameters"]["start_angle"] = INITIAL_GUESS["s_init"]
     REELOUT_CONFIG["sim_parameters"]["end_angle"] = INITIAL_GUESS["s_final"]
 
 REELOUT_CONFIG["sim_parameters"]["n_points"] = 100
-REELOUT_CONFIG["sim_parameters"]["input_depower"] = 1.6
+# the kite's matched reel-out tape (identification.yaml flight_match)
+REELOUT_CONFIG["sim_parameters"]["input_depower"] = flight_depower_match(
+    KITE_CONFIG_PATH.parent, 2019
+)[0]
 REELOUT_CONFIG["sim_parameters"]["reg_weight"] = 1.0
 REELOUT_CONFIG["sim_parameters"]["detect_simple_bounds"] = True
 WIND_CONFIG = {

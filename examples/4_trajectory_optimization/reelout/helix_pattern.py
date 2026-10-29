@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from awetrim import SystemModel
+from awetrim.identification.controls import flight_depower_match
 from awetrim.environment.wind_factory import create_wind_model
 from awetrim.system.kite import Kite
 from awetrim.system.tether import RigidLumpedTether
@@ -81,7 +82,10 @@ if REGENERATE_INITIAL_GUESS:
 # REELOUT_CONFIG["path_parameters"]["az_amp0"] = 0.3536
 # # REELOUT_CONFIG["path_parameters"]["kappa"] = 1
 # REELOUT_CONFIG["path_parameters"]["kbeta"] = 0
-REELOUT_CONFIG["sim_parameters"]["input_depower"] = 1.6
+# the kite's matched reel-out tape (identification.yaml flight_match)
+REELOUT_CONFIG["sim_parameters"]["input_depower"] = flight_depower_match(
+    KITE_CONFIG_PATH.parent, 2019
+)[0]
 WIND_CONFIG = {
     "speed_wind_at_100": 10,
     "z0": 0.03,
